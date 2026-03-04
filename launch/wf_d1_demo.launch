@@ -1,0 +1,44 @@
+<launch>
+  <!-- Set start_sim=false if Gazebo is already running. -->
+  <arg name="start_sim" default="true"/>
+  <arg name="world_file" default=""/>
+
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="cmd_topic" default="/cmd_vel"/>
+
+  <arg name="qtable_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
+  <arg name="actions_path" default="$(find wall_following_triton)/config/actions.yaml"/>
+
+  <arg name="front_too_close" default="0.55"/>
+  <arg name="right_too_close" default="0.55"/>
+  <arg name="right_too_far" default="0.95"/>
+  <arg name="heading_parallel_tolerance" default="0.10"/>
+
+  <include if="$(eval arg('start_sim') == 'true' and arg('world_file') == '')"
+           file="$(find stingray_sim)/launch/wall_following.launch"/>
+
+  <include if="$(eval arg('start_sim') == 'true' and arg('world_file') != '')"
+           file="$(find stingray_sim)/launch/wall_following.launch">
+    <arg name="world_file" value="$(arg world_file)"/>
+  </include>
+
+  <node pkg="wall_following_triton"
+        type="wf_policy_node.py"
+        name="wf_policy_node"
+        output="screen"
+        respawn="false">
+    <param name="scan_topic" value="$(arg scan_topic)"/>
+    <param name="cmd_topic" value="$(arg cmd_topic)"/>
+
+    <param name="qtable_path" value="$(arg qtable_path)"/>
+    <param name="actions_path" value="$(arg actions_path)"/>
+
+    <param name="front_too_close" value="$(arg front_too_close)"/>
+    <param name="right_too_close" value="$(arg right_too_close)"/>
+    <param name="right_too_far" value="$(arg right_too_far)"/>
+    <param name="heading_parallel_tolerance" value="$(arg heading_parallel_tolerance)"/>
+
+    <param name="collision_action" value="turn_left_hard"/>
+    <param name="scan_timeout_s" value="0.5"/>
+  </node>
+</launch>
