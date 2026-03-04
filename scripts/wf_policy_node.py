@@ -29,7 +29,8 @@ class WallFollowingPolicyNode:
 
         self.collision_action = rospy.get_param("~collision_action", "turn_left_hard")
         self.default_action = rospy.get_param("~default_action", "straight")
-        self.scan_timeout_s = float(rospy.get_param("~scan_timeout_s", 0.5))
+        self.scan_timeout_s = float(rospy.get_param("~scan_timeout_s", 2.5))
+        self.enable_scan_watchdog = self._param_bool("~enable_scan_watchdog", False)
 
         self.encoder = StateEncoder(
             front_too_close=float(rospy.get_param("~front_too_close", 0.55)),
@@ -58,11 +59,25 @@ class WallFollowingPolicyNode:
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=10)
         self.scan_sub = rospy.Subscriber(self.scan_topic, LaserScan, self._scan_callback, queue_size=1)
 
-        self.watchdog_timer = rospy.Timer(rospy.Duration(0.1), self._watchdog_callback)
+        self.watchdog_timer = None
+        if self.enable_scan_watchdog:
+            self.watchdog_timer = rospy.Timer(rospy.Duration(0.1), self._watchdog_callback)
 
         rospy.loginfo("WallFollowingPolicyNode started.")
         rospy.loginfo("Listening on %s, publishing on %s", self.scan_topic, self.cmd_topic)
         rospy.loginfo("Loaded %d states from Q-table and %d actions", len(self.q_table), len(self.actions))
+        rospy.loginfo("Scan watchdog enabled=%s timeout=%.2fs", self.enable_scan_watchdog, self.scan_timeout_s)
+
+    @staticmethod
+    def _param_bool(name: str, default: bool) -> bool:
+        raw = rospy.get_param(name, default)
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, (int, float)):
+            return raw != 0
+        if isinstance(raw, str):
+            return raw.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(raw)
 
     def _load_actions(self, actions_path: str) -> Dict[str, Dict[str, float]]:
         with open(actions_path, "r", encoding="utf-8") as f:

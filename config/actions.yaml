@@ -2,17 +2,17 @@ default_action: straight
 
 actions:
   turn_left_hard:
-    linear_x: 0.08
-    angular_z: 1.20
+    linear_x: 0.14
+    angular_z: 0.95
   turn_left_soft:
-    linear_x: 0.12
-    angular_z: 0.65
-  straight:
     linear_x: 0.18
+    angular_z: 0.45
+  straight:
+    linear_x: 0.24
     angular_z: 0.00
   turn_right_soft:
-    linear_x: 0.12
-    angular_z: -0.65
+    linear_x: 0.18
+    angular_z: -0.45
   turn_right_hard:
-    linear_x: 0.08
-    angular_z: -1.20
+    linear_x: 0.14
+    angular_z: -0.95

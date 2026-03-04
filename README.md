@@ -101,6 +101,12 @@ Run only the policy node (if Gazebo is already launched elsewhere):
 roslaunch wall_following_triton wf_d1_demo.launch start_sim:=false
 ```
 
+Optional watchdog (disabled by default):
+
+```bash
+roslaunch wall_following_triton wf_d1_demo.launch enable_scan_watchdog:=true scan_timeout_s:=2.5
+```
+
 ## Quick Validation Commands (VM)
 
 Check command publish rate:
@@ -113,6 +119,19 @@ Inspect command values:
 
 ```bash
 rostopic echo -n 10 /cmd_vel
+```
+
+Check that Gazebo is subscribing to `/cmd_vel`:
+
+```bash
+rostopic info /cmd_vel
+```
+
+If there is no subscriber on `/cmd_vel`, find the correct velocity topic and pass it:
+
+```bash
+rostopic list | grep -E 'cmd_vel|vel'
+roslaunch wall_following_triton wf_d1_demo.launch cmd_topic:=/your_robot_cmd_topic
 ```
 
 ## Deliverable 1 Acceptance Checklist
