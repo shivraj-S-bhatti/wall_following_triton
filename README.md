@@ -26,6 +26,15 @@ sudo apt install -y \
 pip3 install --user pynput
 ```
 
+For TA convenience, this repository includes one setup script that performs all required install/clone/build steps:
+
+```bash
+chmod +x setup_d1.sh
+./setup_d1.sh
+```
+
+See `SETUP_VM.md` for details.
+
 Create catkin workspace (if needed):
 
 ```bash
