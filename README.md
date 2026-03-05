@@ -1,165 +1,122 @@
-# wall_following_triton (Project 2 Deliverable 1)
+# wall_following_triton (COMPSCI 603 Project 2 - Deliverable 1)
 
-Manual Q-table wall-following policy for Triton in ROS Noetic/Gazebo.
+This package implements a manually defined Q-table policy for Triton straight-wall following in ROS Noetic + Gazebo.
 
-This package implements Deliverable 1 requirements:
-- state discretization from `/scan`
-- manually defined Q-table policy
-- right-side straight-wall following
-- one launch file to run simulation + policy
+## What this package provides
 
-## Package Layout
+- `scripts/wf_policy_node.py`: subscribes to `/scan`, publishes `geometry_msgs/Twist` on `/cmd_vel`
+- `scripts/state_encoder.py`: discretizes LiDAR into `(front_bin, right_bin, heading_bin)`
+- `config/qtable_d1.yaml`: manual Q-values for D1 policy
+- `config/actions.yaml`: discrete action set and velocities
+- `launch/wf_d1_demo.launch`: one-command demo launch (starts Gazebo + policy)
 
-- `scripts/wf_policy_node.py`: policy node (subscribes `/scan`, publishes `/cmd_vel`)
-- `scripts/state_encoder.py`: LiDAR-to-state encoder
-- `config/qtable_d1.yaml`: manually defined Q-values
-- `config/actions.yaml`: discrete actions and velocities
-- `launch/wf_d1_demo.launch`: one-command demonstration launch
+## Required environment (Ubuntu 20.04)
 
-## Decision Defaults (D1)
-
-- Wall side: right
-- Desired wall distance: `0.75 m`
-- State bins:
-  - `front_bin`: `too_close`, `safe`
-  - `right_bin`: `too_close`, `good`, `too_far`
-  - `heading_bin`: `toward_wall`, `parallel`, `away_from_wall`
-- Thresholds:
-  - `front too_close < 0.55`
-  - `right too_close < 0.55`
-  - `right too_far > 0.95`
-  - `parallel if abs(right_front - right_rear) <= 0.10`
-
-## Host-Edit + VM-Run Workflow
-
-You edit code on host and run ROS/Gazebo in your Ubuntu VM.
-
-### 1) Push code from host
+Install ROS Noetic desktop full and simulator dependencies (as in stingray guide):
 
 ```bash
-cd /Users/apple/Downloads/robotics/wall_following_triton
-git add .
-git commit -m "Implement D1 manual Q-table wall-following package"
-git push origin main
+sudo apt update
+sudo apt install -y \
+  ros-noetic-desktop-full \
+  ros-noetic-gazebo-ros-pkgs \
+  ros-noetic-depthimage-to-laserscan \
+  ros-noetic-gmapping \
+  python3-catkin-tools \
+  python3-pip
+pip3 install --user pynput
 ```
 
-### 2) Pull and place package in VM catkin workspace
+Create catkin workspace (if needed):
+
+```bash
+mkdir -p ~/catkin_ws/src
+cd ~/catkin_ws
+catkin_make
+```
+
+Clone required simulator package:
+
+```bash
+cd ~/catkin_ws/src
+git clone https://gitlab.com/HCRLab/stingray-robotics/stingray_sim.git
+```
+
+Clone this package:
 
 ```bash
 cd ~/catkin_ws/src
 git clone https://github.com/shivraj-S-bhatti/wall_following_triton.git
-# or, if already cloned:
-cd ~/catkin_ws/src/wall_following_triton
-git pull
 ```
 
-### 3) Build in VM
+Build:
 
 ```bash
 cd ~/catkin_ws
-catkin_make --pkg wall_following_triton
-source devel/setup.bash
-```
-
-## Minimal Triton Simulator Setup (Low Disk)
-
-If ROS/Gazebo is installed but Triton sim is missing:
-
-```bash
-cd ~/catkin_ws/src
-git clone --depth 1 https://gitlab.com/HCRLab/stingray-robotics/stingray_sim.git
-cd ~/catkin_ws
+source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
 ```
 
-Optional disk cleanup after install/build:
-
-```bash
-sudo apt-get clean
-sudo rm -rf /var/lib/apt/lists/*
-rm -rf ~/.cache/pip
-```
-
-## Run Deliverable 1 Demo
-
-Default world from `stingray_sim`:
+## Run demo (TA command)
 
 ```bash
 roslaunch wall_following_triton wf_d1_demo.launch
 ```
 
-Use a custom world:
+This launch file automatically starts:
+- `stingray_sim/launch/wall_following.launch`
+- `wall_following_triton/scripts/wf_policy_node.py`
 
-```bash
-roslaunch wall_following_triton wf_d1_demo.launch world_file:=/absolute/path/to/world.world
-```
-
-Run only the policy node (if Gazebo is already launched elsewhere):
-
-```bash
-roslaunch wall_following_triton wf_d1_demo.launch start_sim:=false
-```
-
-Optional watchdog (disabled by default):
-
-```bash
-roslaunch wall_following_triton wf_d1_demo.launch enable_scan_watchdog:=true scan_timeout_s:=2.5
-```
-
-## Quick Validation Commands (VM)
-
-Check command publish rate:
-
-```bash
-rostopic hz /cmd_vel
-```
-
-Inspect command values:
-
-```bash
-rostopic echo -n 10 /cmd_vel
-```
-
-Check that Gazebo is subscribing to `/cmd_vel`:
+## Quick validation
 
 ```bash
 rostopic info /cmd_vel
+rostopic hz /cmd_vel
 ```
 
-If there is no subscriber on `/cmd_vel`, find the correct velocity topic and pass it:
+Expected:
+- `/wf_policy_node` publishes to `/cmd_vel`
+- Gazebo has a subscriber on `/cmd_vel`
+
+## Demo video workflow (Ubuntu)
+
+### Option 1: GUI screen recorder (easy)
+
+Use built-in GNOME recorder:
+- `Ctrl` + `Alt` + `Shift` + `R` to start/stop recording
+- file is saved in `~/Videos`
+
+### Option 2: ffmpeg (scriptable)
+
+Record desktop at lower fps to keep size smaller:
 
 ```bash
-rostopic list | grep -E 'cmd_vel|vel'
-roslaunch wall_following_triton wf_d1_demo.launch cmd_topic:=/your_robot_cmd_topic
+ffmpeg -video_size 1280x720 -framerate 15 -f x11grab -i :0.0 \
+  -c:v libx264 -preset veryfast -crf 30 raw_demo.mp4
 ```
 
-## Deliverable 1 Acceptance Checklist
-
-- [ ] `roslaunch wall_following_triton wf_d1_demo.launch` starts Gazebo + node
-- [ ] no crash during 5 x 60s straight-wall runs
-- [ ] robot keeps moving while following right straight wall
-- [ ] front obstacle triggers visible left recovery turn
-- [ ] include demo video (or public link), straight-wall behavior shown clearly
-- [ ] submit `P2D1_firstname_lastname.tar(.gz)` containing:
-  - ROS package
-  - demo video or video link reference
-
-## Demo Video Compression (<20 MB)
+Then speed up 4x and compress for Canvas (<20 MB target):
 
 ```bash
-ffmpeg -i raw_demo.mp4 -vf "scale=1280:-2,fps=20" -c:v libx264 -crf 30 -preset veryfast -an demo_d1_compressed.mp4
+ffmpeg -i raw_demo.mp4 -filter:v "setpts=0.25*PTS,scale=960:-2,fps=15" \
+  -c:v libx264 -preset veryfast -crf 33 -an demo_d1_fast.mp4
 ```
 
-## Packaging for Canvas
+## Submission packaging (P2-D1)
 
-From directory containing package + demo video:
+Submit a single tarball named `P2D1_firstname_lastname.tar` or `.tar.gz` with exactly two items:
+1. ROS package folder `wall_following_triton`
+2. Demo video file (or a text file containing public video link)
+
+Example:
 
 ```bash
-tar -czf P2D1_firstname_lastname.tar.gz wall_following_triton demo_d1_compressed.mp4
+tar -czf P2D1_firstname_lastname.tar.gz wall_following_triton demo_d1_fast.mp4
 ```
 
-## Notes
+## Important notes for submission
 
-- Update maintainer name/email in `package.xml` before submission.
-- This package intentionally targets straight-wall following only (D1 scope).
+- Do **not** bundle ROS itself or Ubuntu packages inside your tarball.
+- A setup script is optional, not required by D1 rubric.
+- This package is intentionally scoped to straight-wall following (D1 requirement).
+- Update maintainer name/email in `package.xml` before final upload.

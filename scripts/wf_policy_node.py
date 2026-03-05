@@ -29,8 +29,6 @@ class WallFollowingPolicyNode:
 
         self.collision_action = rospy.get_param("~collision_action", "turn_left_hard")
         self.default_action = rospy.get_param("~default_action", "straight")
-        self.scan_timeout_s = float(rospy.get_param("~scan_timeout_s", 2.5))
-        self.enable_scan_watchdog = self._param_bool("~enable_scan_watchdog", False)
 
         self.encoder = StateEncoder(
             front_too_close=float(rospy.get_param("~front_too_close", 0.55)),
@@ -53,31 +51,12 @@ class WallFollowingPolicyNode:
             )
             self.collision_action = self.default_action
 
-        self.last_scan_time = None
-        self.timeout_stop_sent = False
-
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=10)
         self.scan_sub = rospy.Subscriber(self.scan_topic, LaserScan, self._scan_callback, queue_size=1)
-
-        self.watchdog_timer = None
-        if self.enable_scan_watchdog:
-            self.watchdog_timer = rospy.Timer(rospy.Duration(0.1), self._watchdog_callback)
 
         rospy.loginfo("WallFollowingPolicyNode started.")
         rospy.loginfo("Listening on %s, publishing on %s", self.scan_topic, self.cmd_topic)
         rospy.loginfo("Loaded %d states from Q-table and %d actions", len(self.q_table), len(self.actions))
-        rospy.loginfo("Scan watchdog enabled=%s timeout=%.2fs", self.enable_scan_watchdog, self.scan_timeout_s)
-
-    @staticmethod
-    def _param_bool(name: str, default: bool) -> bool:
-        raw = rospy.get_param(name, default)
-        if isinstance(raw, bool):
-            return raw
-        if isinstance(raw, (int, float)):
-            return raw != 0
-        if isinstance(raw, str):
-            return raw.strip().lower() in {"1", "true", "yes", "on"}
-        return bool(raw)
 
     def _load_actions(self, actions_path: str) -> Dict[str, Dict[str, float]]:
         with open(actions_path, "r", encoding="utf-8") as f:
@@ -118,9 +97,6 @@ class WallFollowingPolicyNode:
         return parsed
 
     def _scan_callback(self, msg: LaserScan):
-        self.last_scan_time = rospy.Time.now()
-        self.timeout_stop_sent = False
-
         state = self.encoder.encode(msg)
         action_name = self._select_action(state)
         self._publish_action(action_name)
@@ -173,21 +149,6 @@ class WallFollowingPolicyNode:
             cmd.angular.z = 0.0
 
         self.cmd_pub.publish(cmd)
-
-    def _watchdog_callback(self, _event):
-        if self.last_scan_time is None:
-            return
-
-        elapsed = (rospy.Time.now() - self.last_scan_time).to_sec()
-        if elapsed <= self.scan_timeout_s:
-            return
-
-        if not self.timeout_stop_sent:
-            stop_msg = Twist()
-            self.cmd_pub.publish(stop_msg)
-            self.timeout_stop_sent = True
-            rospy.logwarn_throttle(1.0, "No /scan update for %.2fs. Publishing stop command.", elapsed)
-
 
 def main():
     rospy.init_node("wf_policy_node", anonymous=False)

@@ -2,10 +2,16 @@
 <package format="2">
   <name>wall_following_triton</name>
   <version>0.1.0</version>
-  <description>Deliverable 1 manual Q-table policy for right-side wall following with Triton in Gazebo.</description>
+  <description>
+    COMPSCI 603 Project 2 Deliverable 1 package. Runs manual Q-table wall following for Triton.
+    Launch demo with: roslaunch wall_following_triton wf_d1_demo.launch
+    This launch starts stingray_sim wall_following world and this package's wf_policy_node.
+  </description>
 
-  <maintainer email="student@example.com">Student Name</maintainer>
+  <maintainer email="shivraj.bhatti@example.com">Shivraj Bhatti</maintainer>
   <license>MIT</license>
+
+  <url type="repository">https://github.com/shivraj-S-bhatti/wall_following_triton</url>
 
   <buildtool_depend>catkin</buildtool_depend>
 
