@@ -1,0 +1,53 @@
+# Deliverable 2 parameter defaults for RL training/testing.
+#
+# This file is loaded under the rl_d2_agent node namespace in launch.
+# You can tune values here without touching Python code.
+
+# RL algorithm hyperparameters
+alpha: 0.20
+gamma: 0.95
+epsilon: 0.20
+epsilon_min: 0.05
+epsilon_decay: 0.995
+
+# Control frequency (Hz). Each timer tick performs one RL step.
+control_hz: 6.0
+
+# Training budget
+max_episodes: 200
+max_steps_per_episode: 300
+training_done_stop: true
+
+# Reward shaping terms
+reward_right_good: 1.00
+reward_right_too_close: -0.80
+reward_right_too_far: -0.60
+reward_heading_parallel: 0.60
+reward_heading_off: -0.20
+reward_front_safe: 0.20
+reward_front_too_close: -2.50
+reward_forward_scale: 0.50
+
+# Collision handling
+collision_distance: 0.30
+collision_penalty: -8.00
+
+# State encoder thresholds (same baseline as D1)
+front_too_close: 0.55
+right_too_close: 0.55
+right_too_far: 0.95
+heading_parallel_tolerance: 0.10
+
+# Gazebo reset model name
+robot_model_name: triton
+
+# Reproducibility
+random_seed: 603
+
+# Candidate start poses used in train mode episode resets.
+# NOTE: adjust these if your map spawn region differs.
+start_poses:
+  - {x: 0.00, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: 0.50, y: 0.00, z: 0.10, yaw: 1.57}
+  - {x: 0.00, y: -0.50, z: 0.10, yaw: -1.57}
+  - {x: -0.50, y: 0.00, z: 0.10, yaw: 3.14}

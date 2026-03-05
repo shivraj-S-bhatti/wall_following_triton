@@ -1,0 +1,44 @@
+<launch>
+  <!--
+    Single launch entrypoint for Deliverable 2.
+    Required by rubric: user can choose algorithm and mode.
+  -->
+
+  <arg name="algorithm" default="q_learning"/>
+  <arg name="mode" default="train"/>
+
+  <arg name="scan_topic" default="/scan"/>
+  <arg name="cmd_topic" default="/cmd_vel"/>
+
+  <!-- Q-table I/O paths -->
+  <arg name="qtable_input_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
+  <arg name="qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_qlearning_best.yaml"/>
+
+  <!-- CSV metrics output for reward-vs-episode plots -->
+  <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_training_metrics.csv"/>
+
+  <!-- Start simulator + robot/world -->
+  <include file="$(find stingray_sim)/launch/wall_following.launch"/>
+
+  <node pkg="wall_following_triton"
+        type="rl_d2_agent.py"
+        name="rl_d2_agent"
+        output="screen"
+        respawn="false">
+
+    <!-- Load parameter defaults from YAML first -->
+    <rosparam command="load" file="$(find wall_following_triton)/config/d2_params.yaml"/>
+
+    <!-- Then apply launch-time overrides -->
+    <param name="algorithm" value="$(arg algorithm)"/>
+    <param name="mode" value="$(arg mode)"/>
+
+    <param name="scan_topic" value="$(arg scan_topic)"/>
+    <param name="cmd_topic" value="$(arg cmd_topic)"/>
+
+    <param name="actions_path" value="$(find wall_following_triton)/config/actions.yaml"/>
+    <param name="qtable_input_path" value="$(arg qtable_input_path)"/>
+    <param name="qtable_output_path" value="$(arg qtable_output_path)"/>
+    <param name="metrics_csv_path" value="$(arg metrics_csv_path)"/>
+  </node>
+</launch>

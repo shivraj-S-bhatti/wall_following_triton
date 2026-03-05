@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package()
 
 catkin_install_python(PROGRAMS
+  scripts/rl_d2_agent.py
   scripts/state_encoder.py
   scripts/wf_policy_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

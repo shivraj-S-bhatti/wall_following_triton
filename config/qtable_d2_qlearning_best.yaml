@@ -1,0 +1,127 @@
+# Manual Q-values for Deliverable 1 straight-wall following.
+# State key format: front_bin|right_bin|heading_bin
+
+metadata:
+  wall_side: right
+  desired_wall_distance_m: 0.75
+  front_too_close_m: 0.55
+  right_too_close_m: 0.55
+  right_too_far_m: 0.95
+  heading_parallel_tolerance_m: 0.10
+
+states:
+  # Front blocked: always prioritize a strong left recovery.
+  "too_close|too_close|toward_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|too_close|parallel":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|too_close|away_from_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|good|toward_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|good|parallel":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|good|away_from_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|too_far|toward_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|too_far|parallel":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+  "too_close|too_far|away_from_wall":
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    straight: -5.0
+    turn_right_soft: -8.0
+    turn_right_hard: -10.0
+
+  # Front clear and right wall too close: drift left.
+  "safe|too_close|toward_wall":
+    turn_left_hard: 9.0
+    turn_left_soft: 8.0
+    straight: -1.0
+    turn_right_soft: -7.0
+    turn_right_hard: -9.0
+  "safe|too_close|parallel":
+    turn_left_hard: 7.0
+    turn_left_soft: 9.0
+    straight: 0.0
+    turn_right_soft: -6.0
+    turn_right_hard: -8.0
+  "safe|too_close|away_from_wall":
+    turn_left_hard: 6.0
+    turn_left_soft: 8.0
+    straight: 1.0
+    turn_right_soft: -4.0
+    turn_right_hard: -6.0
+
+  # Good wall distance: maintain parallel motion.
+  "safe|good|toward_wall":
+    turn_left_hard: 2.0
+    turn_left_soft: 9.0
+    straight: 4.0
+    turn_right_soft: -2.0
+    turn_right_hard: -5.0
+  "safe|good|parallel":
+    turn_left_hard: -2.0
+    turn_left_soft: 2.0
+    straight: 10.0
+    turn_right_soft: 2.0
+    turn_right_hard: -2.0
+  "safe|good|away_from_wall":
+    turn_left_hard: -5.0
+    turn_left_soft: -1.0
+    straight: 3.0
+    turn_right_soft: 9.0
+    turn_right_hard: 6.0
+
+  # Right wall too far: steer right to reacquire target distance.
+  "safe|too_far|toward_wall":
+    turn_left_hard: -4.0
+    turn_left_soft: -1.0
+    straight: 2.0
+    turn_right_soft: 8.0
+    turn_right_hard: 5.0
+  "safe|too_far|parallel":
+    turn_left_hard: -6.0
+    turn_left_soft: -2.0
+    straight: 1.0
+    turn_right_soft: 9.0
+    turn_right_hard: 6.0
+  "safe|too_far|away_from_wall":
+    turn_left_hard: -8.0
+    turn_left_soft: -3.0
+    straight: -1.0
+    turn_right_soft: 8.0
+    turn_right_hard: 10.0

@@ -1,0 +1,9 @@
+<launch>
+  <include file="$(find wall_following_triton)/launch/wf_d2.launch">
+    <arg name="algorithm" value="q_learning"/>
+    <arg name="mode" value="train"/>
+    <arg name="qtable_input_path" value="$(find wall_following_triton)/config/qtable_d1.yaml"/>
+    <arg name="qtable_output_path" value="$(find wall_following_triton)/config/qtable_d2_qlearning_best.yaml"/>
+    <arg name="metrics_csv_path" value="$(find wall_following_triton)/artifacts/d2_qlearning_metrics.csv"/>
+  </include>
+</launch>

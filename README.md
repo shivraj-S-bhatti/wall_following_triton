@@ -129,3 +129,16 @@ tar -czf P2D1_firstname_lastname.tar.gz wall_following_triton demo_d1_fast.mp4
 - A setup script is optional, not required by D1 rubric.
 - This package is intentionally scoped to straight-wall following (D1 requirement).
 - Update maintainer name/email in `package.xml` before final upload.
+
+## Deliverable 2 (RL branch workflow)
+
+Use branch `codex/d2` for D2 development.
+
+D2 entrypoints:
+- `roslaunch wall_following_triton wf_d2_qlearning_train.launch`
+- `roslaunch wall_following_triton wf_d2_qlearning_test.launch`
+- `roslaunch wall_following_triton wf_d2_sarsa_train.launch`
+- `roslaunch wall_following_triton wf_d2_sarsa_test.launch`
+
+Detailed instruction-heavy walkthrough:
+- `D2_GUIDE.md`
