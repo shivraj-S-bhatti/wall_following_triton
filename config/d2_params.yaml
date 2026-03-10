@@ -38,6 +38,12 @@ trapped_yaw_epsilon: 0.08
 trapped_steps_threshold: 12
 trapped_penalty: -4.00
 
+# Open-space wall acquisition prior.
+acquire_wall_enabled: true
+acquire_wall_distance: 1.40
+acquire_angle_soft_deg: 20.0
+acquire_angle_hard_deg: 55.0
+
 # State encoder thresholds (same baseline as D1)
 front_too_close: 0.55
 right_too_close: 0.55
