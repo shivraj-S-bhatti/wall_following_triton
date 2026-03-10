@@ -45,29 +45,21 @@ def main():
     try:
         tty.setcbreak(sys.stdin.fileno())
         rate = rospy.Rate(20)
-        idle_sent = False
+        current_cmd = Twist()
         while not rospy.is_shutdown():
             readable, _, _ = select.select([sys.stdin], [], [], 0.1)
-            if not readable:
-                if not idle_sent:
-                    pub.publish(Twist())
-                    idle_sent = True
-                rate.sleep()
-                continue
+            if readable:
+                key = sys.stdin.read(1)
+                if key == "q":
+                    break
+                if key in bindings:
+                    linear_x, linear_y, angular_z = bindings[key]
+                    current_cmd = Twist()
+                    current_cmd.linear.x = linear_x
+                    current_cmd.linear.y = linear_y
+                    current_cmd.angular.z = angular_z
 
-            key = sys.stdin.read(1)
-            if key == "q":
-                break
-            if key not in bindings:
-                continue
-
-            linear_x, linear_y, angular_z = bindings[key]
-            cmd = Twist()
-            cmd.linear.x = linear_x
-            cmd.linear.y = linear_y
-            cmd.angular.z = angular_z
-            pub.publish(cmd)
-            idle_sent = False
+            pub.publish(current_cmd)
             rate.sleep()
     finally:
         pub.publish(Twist())
