@@ -88,6 +88,7 @@ class RLWallFollowerD2:
         self.max_episodes = int(rospy.get_param("~max_episodes", 300))
         self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 350))
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
+        self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
 
         # -----------------------------
         # 3) Reward shaping config
@@ -116,7 +117,9 @@ class RLWallFollowerD2:
         self.actions_path = rospy.get_param("~actions_path")
         self.qtable_input_path = rospy.get_param("~qtable_input_path")
         self.qtable_output_path = rospy.get_param("~qtable_output_path")
+        latest_qtable_output_path = str(rospy.get_param("~latest_qtable_output_path", "")).strip()
         self.metrics_csv_path = rospy.get_param("~metrics_csv_path")
+        self.latest_qtable_output_path = latest_qtable_output_path or self._derive_latest_qtable_path(self.qtable_output_path)
 
         # In test mode, we always act greedily. In train mode, we start with epsilon-greedy.
         self.exploration_enabled = self.mode == "train"
@@ -143,6 +146,12 @@ class RLWallFollowerD2:
             right_too_close=float(rospy.get_param("~right_too_close", 0.55)),
             right_too_far=float(rospy.get_param("~right_too_far", 0.95)),
             heading_parallel_tolerance=float(rospy.get_param("~heading_parallel_tolerance", 0.10)),
+            front_sector_start_deg=float(rospy.get_param("~front_sector_start_deg", 75.0)),
+            front_sector_end_deg=float(rospy.get_param("~front_sector_end_deg", 105.0)),
+            right_front_sector_start_deg=float(rospy.get_param("~right_front_sector_start_deg", 20.0)),
+            right_front_sector_end_deg=float(rospy.get_param("~right_front_sector_end_deg", 70.0)),
+            right_rear_sector_start_deg=float(rospy.get_param("~right_rear_sector_start_deg", -70.0)),
+            right_rear_sector_end_deg=float(rospy.get_param("~right_rear_sector_end_deg", -20.0)),
         )
 
         self.actions = self._load_actions(self.actions_path)
@@ -192,6 +201,11 @@ class RLWallFollowerD2:
         rospy.loginfo("alpha=%.3f gamma=%.3f epsilon=%.3f", self.alpha, self.gamma, self.epsilon)
         rospy.loginfo("qtable_input=%s", self.qtable_input_path)
         rospy.loginfo("qtable_output=%s", self.qtable_output_path)
+        rospy.loginfo(
+            "latest_qtable_output=%s checkpoint_every_episodes=%d",
+            self.latest_qtable_output_path,
+            self.checkpoint_every_episodes,
+        )
 
         # Begin from a known start pose in train mode.
         if self.mode == "train":
@@ -211,6 +225,7 @@ class RLWallFollowerD2:
         for name, cfg in raw_actions.items():
             parsed[str(name)] = {
                 "linear_x": float(cfg.get("linear_x", 0.0)),
+                "linear_y": float(cfg.get("linear_y", 0.0)),
                 "angular_z": float(cfg.get("angular_z", 0.0)),
             }
         return parsed
@@ -248,6 +263,13 @@ class RLWallFollowerD2:
                 self.q_table[state_key] = {}
             for action_name in self.actions.keys():
                 self.q_table[state_key].setdefault(action_name, 0.0)
+
+    @staticmethod
+    def _derive_latest_qtable_path(best_path: str) -> str:
+        root, ext = os.path.splitext(best_path)
+        if ext:
+            return f"{root}_latest{ext}"
+        return f"{best_path}_latest"
 
     # ---------------------------------------------------------------------
     # ROS callbacks
@@ -394,11 +416,14 @@ class RLWallFollowerD2:
         else:
             reward += self.reward_heading_off
 
-        # 4) Small progress term from commanded forward speed.
-        linear_x = float(self.actions[action_name]["linear_x"])
-        reward += self.reward_forward_scale * linear_x
+        # 4) Small progress term from commanded translation.
+        reward += self.reward_forward_scale * self._action_progress_speed(action_name)
 
         return reward
+
+    def _action_progress_speed(self, action_name: str) -> float:
+        cfg = self.actions[action_name]
+        return max(abs(float(cfg["linear_x"])), abs(float(cfg["linear_y"])))
 
     def _is_terminal(self, state: EncodedState) -> bool:
         # Terminal if robot gets dangerously close ahead.
@@ -433,6 +458,7 @@ class RLWallFollowerD2:
 
         # Append one row to metrics CSV after every episode.
         self._append_metrics_row(stats)
+        self._save_latest_checkpoint(stats.episode_idx + 1)
 
         # Exponential epsilon decay after each episode.
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -440,8 +466,9 @@ class RLWallFollowerD2:
         self.episode_idx += 1
 
         if self.episode_idx >= self.max_episodes:
-            # Final save before stopping.
-            self._save_q_table(self.qtable_output_path)
+            # Preserve the separately tracked best policy and only refresh the
+            # resumable/latest checkpoint at training end.
+            self._save_q_table(self.latest_qtable_output_path)
             rospy.loginfo("Training finished at episode %d", self.episode_idx)
             if self.training_done_stop:
                 self._publish_stop()
@@ -514,6 +541,13 @@ class RLWallFollowerD2:
         with open(path, "w", encoding="utf-8") as f:
             yaml.safe_dump(payload, f, sort_keys=True)
 
+    def _save_latest_checkpoint(self, completed_episodes: int):
+        if self.checkpoint_every_episodes <= 0:
+            return
+        if completed_episodes % self.checkpoint_every_episodes != 0:
+            return
+        self._save_q_table(self.latest_qtable_output_path)
+
     def _append_metrics_row(self, stats: EpisodeStats):
         os.makedirs(os.path.dirname(self.metrics_csv_path) or ".", exist_ok=True)
         file_exists = os.path.exists(self.metrics_csv_path)
@@ -537,6 +571,7 @@ class RLWallFollowerD2:
         cfg = self.actions[action_name]
         cmd = Twist()
         cmd.linear.x = float(cfg["linear_x"])
+        cmd.linear.y = float(cfg["linear_y"])
         cmd.angular.z = float(cfg["angular_z"])
         self.cmd_pub.publish(cmd)
 

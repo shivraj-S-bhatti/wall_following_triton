@@ -4,6 +4,7 @@
     <arg name="mode" value="train"/>
     <arg name="qtable_input_path" value="$(find wall_following_triton)/config/qtable_d1.yaml"/>
     <arg name="qtable_output_path" value="$(find wall_following_triton)/config/qtable_d2_sarsa_best.yaml"/>
+    <arg name="latest_qtable_output_path" value="$(find wall_following_triton)/config/qtable_d2_sarsa_latest.yaml"/>
     <arg name="metrics_csv_path" value="$(find wall_following_triton)/artifacts/d2_sarsa_metrics.csv"/>
   </include>
 </launch>

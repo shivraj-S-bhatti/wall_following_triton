@@ -13,6 +13,7 @@
   <!-- Q-table I/O paths -->
   <arg name="qtable_input_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
   <arg name="qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_qlearning_best.yaml"/>
+  <arg name="latest_qtable_output_path" default=""/>
 
   <!-- CSV metrics output for reward-vs-episode plots -->
   <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_training_metrics.csv"/>
@@ -39,6 +40,7 @@
     <param name="actions_path" value="$(find wall_following_triton)/config/actions.yaml"/>
     <param name="qtable_input_path" value="$(arg qtable_input_path)"/>
     <param name="qtable_output_path" value="$(arg qtable_output_path)"/>
+    <param name="latest_qtable_output_path" value="$(arg latest_qtable_output_path)"/>
     <param name="metrics_csv_path" value="$(arg metrics_csv_path)"/>
   </node>
 </launch>

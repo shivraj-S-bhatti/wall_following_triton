@@ -35,6 +35,12 @@ class WallFollowingPolicyNode:
             right_too_close=float(rospy.get_param("~right_too_close", 0.55)),
             right_too_far=float(rospy.get_param("~right_too_far", 0.95)),
             heading_parallel_tolerance=float(rospy.get_param("~heading_parallel_tolerance", 0.10)),
+            front_sector_start_deg=float(rospy.get_param("~front_sector_start_deg", 75.0)),
+            front_sector_end_deg=float(rospy.get_param("~front_sector_end_deg", 105.0)),
+            right_front_sector_start_deg=float(rospy.get_param("~right_front_sector_start_deg", 20.0)),
+            right_front_sector_end_deg=float(rospy.get_param("~right_front_sector_end_deg", 70.0)),
+            right_rear_sector_start_deg=float(rospy.get_param("~right_rear_sector_start_deg", -70.0)),
+            right_rear_sector_end_deg=float(rospy.get_param("~right_rear_sector_end_deg", -20.0)),
         )
 
         self.actions = self._load_actions(actions_path)
@@ -69,8 +75,13 @@ class WallFollowingPolicyNode:
         parsed = {}
         for action_name, cfg in raw_actions.items():
             linear_x = float(cfg.get("linear_x", 0.0))
+            linear_y = float(cfg.get("linear_y", 0.0))
             angular_z = float(cfg.get("angular_z", 0.0))
-            parsed[str(action_name)] = {"linear_x": linear_x, "angular_z": angular_z}
+            parsed[str(action_name)] = {
+                "linear_x": linear_x,
+                "linear_y": linear_y,
+                "angular_z": angular_z,
+            }
 
         if "default_action" in data and isinstance(data["default_action"], str):
             self.default_action = data["default_action"]
@@ -141,11 +152,13 @@ class WallFollowingPolicyNode:
 
         cmd = Twist()
         cmd.linear.x = float(action_cfg["linear_x"])
+        cmd.linear.y = float(action_cfg["linear_y"])
         cmd.angular.z = float(action_cfg["angular_z"])
 
-        if not (math.isfinite(cmd.linear.x) and math.isfinite(cmd.angular.z)):
+        if not (math.isfinite(cmd.linear.x) and math.isfinite(cmd.linear.y) and math.isfinite(cmd.angular.z)):
             rospy.logwarn("Non-finite command detected, publishing stop command instead.")
             cmd.linear.x = 0.0
+            cmd.linear.y = 0.0
             cmd.angular.z = 0.0
 
         self.cmd_pub.publish(cmd)

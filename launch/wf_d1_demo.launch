@@ -17,6 +17,12 @@
     <param name="right_too_close" value="0.55"/>
     <param name="right_too_far" value="0.95"/>
     <param name="heading_parallel_tolerance" value="0.10"/>
+    <param name="front_sector_start_deg" value="75.0"/>
+    <param name="front_sector_end_deg" value="105.0"/>
+    <param name="right_front_sector_start_deg" value="20.0"/>
+    <param name="right_front_sector_end_deg" value="70.0"/>
+    <param name="right_rear_sector_start_deg" value="-70.0"/>
+    <param name="right_rear_sector_end_deg" value="-20.0"/>
 
     <param name="collision_action" value="turn_left_hard"/>
   </node>

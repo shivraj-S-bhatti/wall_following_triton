@@ -27,16 +27,37 @@ class StateEncoder:
         right_too_close: float = 0.55,
         right_too_far: float = 0.95,
         heading_parallel_tolerance: float = 0.10,
+        front_sector_start_deg: float = 75.0,
+        front_sector_end_deg: float = 105.0,
+        right_front_sector_start_deg: float = 20.0,
+        right_front_sector_end_deg: float = 70.0,
+        right_rear_sector_start_deg: float = -70.0,
+        right_rear_sector_end_deg: float = -20.0,
     ):
         self.front_too_close = float(front_too_close)
         self.right_too_close = float(right_too_close)
         self.right_too_far = float(right_too_far)
         self.heading_parallel_tolerance = float(heading_parallel_tolerance)
+        # Project 2 Triton frame: +Y is forward, scan angle 0 points along +X.
+        self.front_sector_start_deg = float(front_sector_start_deg)
+        self.front_sector_end_deg = float(front_sector_end_deg)
+        self.right_front_sector_start_deg = float(right_front_sector_start_deg)
+        self.right_front_sector_end_deg = float(right_front_sector_end_deg)
+        self.right_rear_sector_start_deg = float(right_rear_sector_start_deg)
+        self.right_rear_sector_end_deg = float(right_rear_sector_end_deg)
 
     def encode(self, scan_msg) -> EncodedState:
-        front_min = self._sector_min(scan_msg, -15.0, 15.0)
-        right_front = self._sector_min(scan_msg, -70.0, -20.0)
-        right_rear = self._sector_min(scan_msg, -110.0, -70.0)
+        front_min = self._sector_min(scan_msg, self.front_sector_start_deg, self.front_sector_end_deg)
+        right_front = self._sector_min(
+            scan_msg,
+            self.right_front_sector_start_deg,
+            self.right_front_sector_end_deg,
+        )
+        right_rear = self._sector_min(
+            scan_msg,
+            self.right_rear_sector_start_deg,
+            self.right_rear_sector_end_deg,
+        )
         right_min = min(right_front, right_rear)
 
         front_bin = "too_close" if front_min < self.front_too_close else "safe"

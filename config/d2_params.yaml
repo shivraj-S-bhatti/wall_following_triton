@@ -17,6 +17,7 @@ control_hz: 6.0
 max_episodes: 200
 max_steps_per_episode: 300
 training_done_stop: true
+checkpoint_every_episodes: 1
 
 # Reward shaping terms
 reward_right_good: 1.00
@@ -37,6 +38,12 @@ front_too_close: 0.55
 right_too_close: 0.55
 right_too_far: 0.95
 heading_parallel_tolerance: 0.10
+front_sector_start_deg: 75.0
+front_sector_end_deg: 105.0
+right_front_sector_start_deg: 20.0
+right_front_sector_end_deg: 70.0
+right_rear_sector_start_deg: -70.0
+right_rear_sector_end_deg: -20.0
 
 # Gazebo reset model name
 robot_model_name: triton
