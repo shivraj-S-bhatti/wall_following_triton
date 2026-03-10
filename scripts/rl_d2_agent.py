@@ -111,8 +111,9 @@ class RLWallFollowerD2:
         # Terminal collision condition and penalty.
         self.collision_distance = float(rospy.get_param("~collision_distance", 0.30))
         self.collision_penalty = float(rospy.get_param("~collision_penalty", -8.00))
-        self.trapped_position_epsilon = float(rospy.get_param("~trapped_position_epsilon", 0.03))
-        self.trapped_steps_threshold = int(rospy.get_param("~trapped_steps_threshold", 6))
+        self.trapped_position_epsilon = float(rospy.get_param("~trapped_position_epsilon", 0.008))
+        self.trapped_yaw_epsilon = float(rospy.get_param("~trapped_yaw_epsilon", 0.08))
+        self.trapped_steps_threshold = int(rospy.get_param("~trapped_steps_threshold", 12))
         self.trapped_penalty = float(rospy.get_param("~trapped_penalty", -4.00))
 
         # -----------------------------
@@ -181,8 +182,8 @@ class RLWallFollowerD2:
         self.episode_traps = 0
 
         # Trap detection state.
-        self.latest_robot_position: Optional[Tuple[float, float]] = None
-        self.prev_robot_position: Optional[Tuple[float, float]] = None
+        self.latest_robot_pose: Optional[Tuple[float, float, float]] = None
+        self.prev_robot_pose: Optional[Tuple[float, float, float]] = None
         self.stationary_steps = 0
 
         # Keep best reward and persist best policy.
@@ -294,8 +295,14 @@ class RLWallFollowerD2:
         except ValueError:
             return
 
-        pose = msg.pose[idx].position
-        self.latest_robot_position = (float(pose.x), float(pose.y))
+        pose = msg.pose[idx]
+        position = pose.position
+        orientation = pose.orientation
+        yaw = math.atan2(
+            2.0 * (float(orientation.w) * float(orientation.z) + float(orientation.x) * float(orientation.y)),
+            1.0 - 2.0 * (float(orientation.y) ** 2 + float(orientation.z) ** 2),
+        )
+        self.latest_robot_pose = (float(position.x), float(position.y), yaw)
 
     def _on_control_tick(self, _event):
         """Single periodic step for either testing or training.
@@ -458,19 +465,23 @@ class RLWallFollowerD2:
         return None
 
     def _is_trapped(self) -> bool:
-        if self.latest_robot_position is None:
+        if self.latest_robot_pose is None:
             return False
-        if self.prev_robot_position is None:
-            self.prev_robot_position = self.latest_robot_position
+        if self.prev_robot_pose is None:
+            self.prev_robot_pose = self.latest_robot_pose
             self.stationary_steps = 0
             return False
 
-        dx = self.latest_robot_position[0] - self.prev_robot_position[0]
-        dy = self.latest_robot_position[1] - self.prev_robot_position[1]
+        dx = self.latest_robot_pose[0] - self.prev_robot_pose[0]
+        dy = self.latest_robot_pose[1] - self.prev_robot_pose[1]
         distance = math.hypot(dx, dy)
-        self.prev_robot_position = self.latest_robot_position
+        yaw_delta = abs(math.atan2(
+            math.sin(self.latest_robot_pose[2] - self.prev_robot_pose[2]),
+            math.cos(self.latest_robot_pose[2] - self.prev_robot_pose[2]),
+        ))
+        self.prev_robot_pose = self.latest_robot_pose
 
-        if distance <= self.trapped_position_epsilon:
+        if distance <= self.trapped_position_epsilon and yaw_delta <= self.trapped_yaw_epsilon:
             self.stationary_steps += 1
         else:
             self.stationary_steps = 0
@@ -534,7 +545,7 @@ class RLWallFollowerD2:
         self.episode_reward = 0.0
         self.episode_collisions = 0
         self.episode_traps = 0
-        self.prev_robot_position = None
+        self.prev_robot_pose = None
         self.stationary_steps = 0
 
         self._publish_stop()
