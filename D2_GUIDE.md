@@ -27,9 +27,12 @@ Algorithms supported:
   - Convenience wrappers for each train/test algorithm variant
 - `config/d2_params.yaml`
   - Hyperparameters, reward weights, start poses, thresholds
+- `artifacts/qtable_d2_qlearning_best.yaml`
+- `artifacts/qtable_d2_sarsa_best.yaml`
+  - Live learned policies during training
 - `config/qtable_d2_qlearning_best.yaml`
 - `config/qtable_d2_sarsa_best.yaml`
-  - Persistent learned policies for testing mode
+  - Final promoted policies used in testing/submission mode
 
 ## 3) Build
 
@@ -49,7 +52,7 @@ roslaunch wall_following_triton wf_d2_qlearning_train.launch
 ```
 
 Outputs:
-- learned policy saved to: `config/qtable_d2_qlearning_best.yaml`
+- learned policy saved to: `artifacts/qtable_d2_qlearning_best.yaml`
 - metrics CSV saved to: `artifacts/d2_qlearning_metrics.csv`
 
 ### SARSA training
@@ -59,7 +62,7 @@ roslaunch wall_following_triton wf_d2_sarsa_train.launch
 ```
 
 Outputs:
-- learned policy saved to: `config/qtable_d2_sarsa_best.yaml`
+- learned policy saved to: `artifacts/qtable_d2_sarsa_best.yaml`
 - metrics CSV saved to: `artifacts/d2_sarsa_metrics.csv`
 
 ## 5) Run testing (learned policy only)
@@ -93,7 +96,12 @@ Inside each control tick in `train` mode:
 5. Apply TD update:
    - `Q(s,a) <- Q(s,a) + alpha * (target - Q(s,a))`
 6. End episode if collision or max steps reached.
-7. Save best Q-table and append CSV metrics row.
+7. Save best Q-table to `artifacts/` and append CSV metrics row.
+
+Important design choice:
+- training is pure RL
+- the acquisition pre-controller is reserved for `test` mode only
+- this prevents search heuristics from polluting TD updates
 
 ## 7) Most important tuning knobs
 
@@ -110,7 +118,7 @@ Edit in `config/d2_params.yaml`:
 - Collision sensitivity:
   - `collision_distance`, `collision_penalty`
 - Start poses:
-  - `start_poses` list for better generalization
+  - `start_poses` list for better generalization from near-wall reset states
 
 ## 8) Generate the reward-vs-episode figure for report
 

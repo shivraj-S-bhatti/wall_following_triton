@@ -73,14 +73,14 @@ Headless mode keeps Gazebo physics running and kills the GUI client after launch
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 If no latest checkpoint exists yet, start from D1:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 ## Run SARSA Headless
@@ -89,14 +89,14 @@ Fresh SARSA run:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=60 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 Resume SARSA:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=60 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 ## Quick Progress Checks
@@ -208,7 +208,8 @@ cp artifacts/qtable_d2_sarsa_best.yaml config/qtable_d2_sarsa_best.yaml
 ## Current Practical Defaults
 
 - `control_hz: 6.0`
-- `max_episodes: 320`
-- `max_steps_per_episode: 700`
+- `q_learning max_episodes: 320`
+- `sarsa max_episodes: 60`
+- `max_steps_per_episode: 500`
 - live training outputs go to ignored `artifacts/`
 - tracked `config/*best.yaml` files are only for deliberate manual promotion

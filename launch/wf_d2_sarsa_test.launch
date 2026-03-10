@@ -3,6 +3,7 @@
   <arg name="qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_sarsa_best.yaml"/>
   <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_sarsa_metrics.csv"/>
   <arg name="control_hz" default="6.0"/>
+  <arg name="acquire_wall_enabled" default="true"/>
 
   <include file="$(find wall_following_triton)/launch/wf_d2.launch">
     <arg name="algorithm" value="sarsa"/>
@@ -11,5 +12,6 @@
     <arg name="qtable_output_path" value="$(arg qtable_output_path)"/>
     <arg name="metrics_csv_path" value="$(arg metrics_csv_path)"/>
     <arg name="control_hz" value="$(arg control_hz)"/>
+    <arg name="acquire_wall_enabled" value="$(arg acquire_wall_enabled)"/>
   </include>
 </launch>

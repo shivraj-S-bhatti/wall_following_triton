@@ -15,7 +15,7 @@ control_hz: 6.0
 
 # Training budget
 max_episodes: 320
-max_steps_per_episode: 700
+max_steps_per_episode: 500
 training_done_stop: true
 checkpoint_every_episodes: 1
 resume_training_state: true
@@ -38,11 +38,12 @@ trapped_yaw_epsilon: 0.08
 trapped_steps_threshold: 12
 trapped_penalty: -4.00
 
-# Open-space wall acquisition prior.
-acquire_wall_enabled: true
-acquire_wall_distance: 1.40
-acquire_angle_soft_deg: 20.0
-acquire_angle_hard_deg: 55.0
+# Test-mode acquisition prior for arbitrary spawn points.
+# Handoff matches the wall-following state threshold so test-time search does
+# not dump open-space behavior back onto the RL policy too early.
+acquire_wall_enabled: false
+acquire_wall_distance: 0.95
+acquire_front_turn_distance: 0.90
 
 # State encoder thresholds (same baseline as D1)
 front_too_close: 0.55
@@ -65,27 +66,9 @@ random_seed: 603
 # Candidate start poses used in train mode episode resets.
 # NOTE: adjust these if your map spawn region differs.
 start_poses:
-  - {x: 0.00, y: 0.00, z: 0.10, yaw: 0.00}
-  - {x: 0.00, y: 0.00, z: 0.10, yaw: 1.57}
-  - {x: 0.00, y: 0.00, z: 0.10, yaw: -1.57}
-  - {x: 0.00, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: 0.75, y: 0.00, z: 0.10, yaw: 1.57}
-  - {x: 0.75, y: 0.00, z: 0.10, yaw: 0.00}
-  - {x: 0.75, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: -0.75, y: 0.00, z: 0.10, yaw: -1.57}
-  - {x: -0.75, y: 0.00, z: 0.10, yaw: 0.00}
-  - {x: -0.75, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: 0.00, y: -0.75, z: 0.10, yaw: -1.57}
-  - {x: 0.00, y: -0.75, z: 0.10, yaw: 0.00}
-  - {x: 0.00, y: -0.75, z: 0.10, yaw: 1.57}
-  - {x: 0.00, y: 0.75, z: 0.10, yaw: 1.57}
-  - {x: 0.00, y: 0.75, z: 0.10, yaw: 0.00}
-  - {x: 0.00, y: 0.75, z: 0.10, yaw: 3.14}
-  - {x: 0.55, y: 0.55, z: 0.10, yaw: 0.00}
-  - {x: 0.55, y: 0.55, z: 0.10, yaw: 1.57}
-  - {x: 0.55, y: -0.55, z: 0.10, yaw: -1.57}
-  - {x: 0.55, y: -0.55, z: 0.10, yaw: 0.00}
-  - {x: -0.55, y: 0.55, z: 0.10, yaw: 3.14}
-  - {x: -0.55, y: 0.55, z: 0.10, yaw: -1.57}
-  - {x: -0.55, y: -0.55, z: 0.10, yaw: 3.14}
-  - {x: -0.55, y: -0.55, z: 0.10, yaw: 0.00}
+  - {x: -3.088, y: 0.778, z: 0.10, yaw: 0.010}
+  - {x: 1.286, y: 1.052, z: 0.10, yaw: 0.022}
+  - {x: 1.460, y: -1.223, z: 0.10, yaw: 0.079}
+  - {x: 3.343, y: -2.177, z: 0.10, yaw: -1.981}
+  - {x: 3.157, y: 3.185, z: 0.10, yaw: -1.425}
+  - {x: -2.597, y: 3.086, z: 0.10, yaw: -1.433}

@@ -3,9 +3,9 @@
   <name>wall_following_triton</name>
   <version>0.1.0</version>
   <description>
-    COMPSCI 603 Project 2 package for Triton wall following.
-    D1 launch: roslaunch wall_following_triton wf_d1_demo.launch
-    D2 launch: roslaunch wall_following_triton wf_d2.launch algorithm:=q_learning mode:=train
+    COMPSCI 603 Project 2 package for Triton right-wall following.
+    Includes D1 manual policy support plus D2 Q-learning and SARSA
+    with separate training and testing launch flows.
   </description>
 
   <maintainer email="shivraj.bhatti@example.com">Shivraj Bhatti</maintainer>

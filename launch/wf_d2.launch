@@ -11,8 +11,9 @@
   <arg name="cmd_topic" default="/cmd_vel"/>
   <arg name="control_hz" default="6.0"/>
   <arg name="max_episodes" default="320"/>
-  <arg name="max_steps_per_episode" default="700"/>
+  <arg name="max_steps_per_episode" default="500"/>
   <arg name="resume_training_state" default="true"/>
+  <arg name="acquire_wall_enabled" default="false"/>
 
   <!-- Q-table I/O paths -->
   <arg name="qtable_input_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
@@ -44,6 +45,7 @@
     <param name="max_episodes" value="$(arg max_episodes)"/>
     <param name="max_steps_per_episode" value="$(arg max_steps_per_episode)"/>
     <param name="resume_training_state" value="$(arg resume_training_state)"/>
+    <param name="acquire_wall_enabled" value="$(arg acquire_wall_enabled)"/>
 
     <param name="actions_path" value="$(find wall_following_triton)/config/actions.yaml"/>
     <param name="qtable_input_path" value="$(arg qtable_input_path)"/>

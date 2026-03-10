@@ -72,10 +72,9 @@ class RLWallFollowerD2:
 
         self.scan_topic = rospy.get_param("~scan_topic", "/scan")
         self.cmd_topic = rospy.get_param("~cmd_topic", "/cmd_vel")
-        self.acquire_wall_enabled = bool(rospy.get_param("~acquire_wall_enabled", True))
-        self.acquire_wall_distance = float(rospy.get_param("~acquire_wall_distance", 1.40))
-        self.acquire_angle_soft_deg = float(rospy.get_param("~acquire_angle_soft_deg", 20.0))
-        self.acquire_angle_hard_deg = float(rospy.get_param("~acquire_angle_hard_deg", 55.0))
+        self.acquire_wall_enabled = bool(rospy.get_param("~acquire_wall_enabled", False))
+        self.acquire_wall_distance = float(rospy.get_param("~acquire_wall_distance", 0.95))
+        self.acquire_front_turn_distance = float(rospy.get_param("~acquire_front_turn_distance", 0.90))
 
         # -----------------------------
         # 2) RL hyperparameters
@@ -90,8 +89,8 @@ class RLWallFollowerD2:
         self.control_hz = float(rospy.get_param("~control_hz", 6.0))
 
         # Episode controls (used in train mode).
-        self.max_episodes = int(rospy.get_param("~max_episodes", 300))
-        self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 350))
+        self.max_episodes = int(rospy.get_param("~max_episodes", 320))
+        self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 500))
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
         self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
 
@@ -374,9 +373,7 @@ class RLWallFollowerD2:
         state_key = encoded.key
 
         if self.mode == "test":
-            action = self._select_acquisition_action(encoded, self.latest_scan)
-            if action is None:
-                action = self._select_greedy_action(state_key)
+            action = self._select_test_action(encoded)
             self._publish_action(action)
             rospy.loginfo_throttle(
                 1.0,
@@ -404,9 +401,7 @@ class RLWallFollowerD2:
 
         # First step in an episode: choose and execute an initial action.
         if self.prev_state_key is None or self.prev_action is None:
-            next_action = self._select_acquisition_action(current_state, self.latest_scan)
-            if next_action is None:
-                next_action = self._select_behavior_action(current_key)
+            next_action = self._select_behavior_action(current_key)
             self._publish_action(next_action)
 
             self.prev_state_key = current_key
@@ -428,10 +423,8 @@ class RLWallFollowerD2:
 
         self.episode_reward += reward
 
-        # Choose next behavior action (for execution) from current state.
-        next_behavior_action = self._select_acquisition_action(current_state, self.latest_scan)
-        if next_behavior_action is None:
-            next_behavior_action = self._select_behavior_action(current_key)
+        # Train mode is pure RL. Search/acquisition heuristics do not feed TD updates.
+        next_behavior_action = self._select_behavior_action(current_key)
 
         # TD target depends on algorithm choice.
         old_q = self.q_table[self.prev_state_key][self.prev_action]
@@ -485,69 +478,24 @@ class RLWallFollowerD2:
             return random.choice(list(self.actions.keys()))
         return self._select_greedy_action(state_key)
 
-    def _select_acquisition_action(self, state: EncodedState, scan_msg: Optional[LaserScan]) -> Optional[str]:
-        if not self.acquire_wall_enabled or scan_msg is None:
+    def _select_test_action(self, state: EncodedState) -> str:
+        acquisition_action = self._select_test_acquisition_action(state)
+        if acquisition_action is not None:
+            return acquisition_action
+        return self._select_greedy_action(state.key)
+
+    def _select_test_acquisition_action(self, state: EncodedState) -> Optional[str]:
+        if not self.acquire_wall_enabled:
             return None
-        if state.right_min <= self.acquire_wall_distance or state.front_bin == "too_close":
+        if state.right_min <= self.acquire_wall_distance:
             return None
-
-        target = self._nearest_wall_relative_to_front(scan_msg)
-        if target is None:
-            return "straight" if "straight" in self.actions else None
-
-        relative_angle_deg, _distance = target
-        if abs(relative_angle_deg) <= self.acquire_angle_soft_deg:
-            return "straight" if "straight" in self.actions else None
-
-        turn_left = relative_angle_deg > 0.0
-        hard_turn = abs(relative_angle_deg) >= self.acquire_angle_hard_deg
-        if turn_left:
-            action_name = "turn_left_hard" if hard_turn else "turn_left_soft"
-        else:
-            action_name = "turn_right_hard" if hard_turn else "turn_right_soft"
-        return action_name if action_name in self.actions else None
-
-    def _nearest_wall_relative_to_front(self, scan_msg: LaserScan) -> Optional[Tuple[float, float]]:
-        forward_candidates = []
-        all_candidates = []
-
-        angle = float(scan_msg.angle_min)
-        range_max = float(scan_msg.range_max)
-        range_min = float(scan_msg.range_min)
-
-        for raw_value in scan_msg.ranges:
-            try:
-                numeric = float(raw_value)
-            except (TypeError, ValueError):
-                numeric = float("nan")
-
-            if not math.isfinite(numeric):
-                angle += float(scan_msg.angle_increment)
-                continue
-
-            clipped = min(max(numeric, range_min), range_max)
-            if clipped >= (range_max - 1e-3):
-                angle += float(scan_msg.angle_increment)
-                continue
-
-            relative_angle_deg = math.degrees(self._normalize_angle(angle - math.radians(90.0)))
-            candidate = (clipped, abs(relative_angle_deg), relative_angle_deg)
-            all_candidates.append(candidate)
-            if abs(relative_angle_deg) <= 90.0:
-                forward_candidates.append(candidate)
-
-            angle += float(scan_msg.angle_increment)
-
-        candidate_pool = forward_candidates or all_candidates
-        if not candidate_pool:
-            return None
-
-        best_distance, _alignment, best_relative_angle_deg = min(candidate_pool, key=lambda item: (item[0], item[1]))
-        return best_relative_angle_deg, best_distance
-
-    @staticmethod
-    def _normalize_angle(angle_rad: float) -> float:
-        return math.atan2(math.sin(angle_rad), math.cos(angle_rad))
+        if state.front_min > self.acquire_front_turn_distance and "straight" in self.actions:
+            return "straight"
+        if "turn_right_hard" in self.actions:
+            return "turn_right_hard"
+        if "turn_right_soft" in self.actions:
+            return "turn_right_soft"
+        return "straight" if "straight" in self.actions else None
 
     # ---------------------------------------------------------------------
     # Reward and termination
