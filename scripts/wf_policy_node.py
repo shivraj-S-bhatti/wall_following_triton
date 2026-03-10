@@ -4,7 +4,7 @@
 import math
 import os
 import sys
-from typing import Dict
+from typing import Dict, Optional, Tuple
 
 import rospy
 import yaml
@@ -29,6 +29,10 @@ class WallFollowingPolicyNode:
 
         self.collision_action = rospy.get_param("~collision_action", "turn_left_hard")
         self.default_action = rospy.get_param("~default_action", "straight")
+        self.acquire_wall_enabled = bool(rospy.get_param("~acquire_wall_enabled", True))
+        self.acquire_wall_distance = float(rospy.get_param("~acquire_wall_distance", 1.40))
+        self.acquire_angle_soft_deg = float(rospy.get_param("~acquire_angle_soft_deg", 20.0))
+        self.acquire_angle_hard_deg = float(rospy.get_param("~acquire_angle_hard_deg", 55.0))
 
         self.encoder = StateEncoder(
             front_too_close=float(rospy.get_param("~front_too_close", 0.55)),
@@ -109,7 +113,7 @@ class WallFollowingPolicyNode:
 
     def _scan_callback(self, msg: LaserScan):
         state = self.encoder.encode(msg)
-        action_name = self._select_action(state)
+        action_name = self._select_action(state, msg)
         self._publish_action(action_name)
 
         rospy.loginfo_throttle(
@@ -123,10 +127,14 @@ class WallFollowingPolicyNode:
             action_name,
         )
 
-    def _select_action(self, state: EncodedState) -> str:
+    def _select_action(self, state: EncodedState, scan_msg: LaserScan) -> str:
         # Hard safety override: if front obstacle is too close, force a hard left turn.
         if state.front_bin == "too_close":
             return self.collision_action
+
+        acquisition_action = self._select_acquisition_action(state, scan_msg)
+        if acquisition_action is not None:
+            return acquisition_action
 
         state_scores = self.q_table.get(state.key)
         if state_scores:
@@ -146,6 +154,71 @@ class WallFollowingPolicyNode:
         if state.heading_bin == "away_from_wall" and "turn_right_soft" in self.actions:
             return "turn_right_soft"
         return "straight" if "straight" in self.actions else self.default_action
+
+    def _select_acquisition_action(self, state: EncodedState, scan_msg: LaserScan) -> Optional[str]:
+        if not self.acquire_wall_enabled:
+            return None
+        if state.right_min <= self.acquire_wall_distance:
+            return None
+
+        target = self._nearest_wall_relative_to_front(scan_msg)
+        if target is None:
+            return "straight" if "straight" in self.actions else self.default_action
+
+        relative_angle_deg, _distance = target
+        if abs(relative_angle_deg) <= self.acquire_angle_soft_deg:
+            return "straight" if "straight" in self.actions else self.default_action
+
+        turn_left = relative_angle_deg > 0.0
+        hard_turn = abs(relative_angle_deg) >= self.acquire_angle_hard_deg
+        if turn_left:
+            action_name = "turn_left_hard" if hard_turn else "turn_left_soft"
+        else:
+            action_name = "turn_right_hard" if hard_turn else "turn_right_soft"
+        return action_name if action_name in self.actions else self.default_action
+
+    def _nearest_wall_relative_to_front(self, scan_msg: LaserScan) -> Optional[Tuple[float, float]]:
+        # Project 2 Triton frame: +Y is front, while scan angle 0 lies on +X.
+        forward_candidates = []
+        all_candidates = []
+
+        angle = float(scan_msg.angle_min)
+        range_max = float(scan_msg.range_max)
+        range_min = float(scan_msg.range_min)
+
+        for raw_value in scan_msg.ranges:
+            try:
+                numeric = float(raw_value)
+            except (TypeError, ValueError):
+                numeric = float("nan")
+
+            if not math.isfinite(numeric):
+                angle += float(scan_msg.angle_increment)
+                continue
+
+            clipped = min(max(numeric, range_min), range_max)
+            if clipped >= (range_max - 1e-3):
+                angle += float(scan_msg.angle_increment)
+                continue
+
+            relative_angle_deg = math.degrees(self._normalize_angle(angle - math.radians(90.0)))
+            candidate = (clipped, abs(relative_angle_deg), relative_angle_deg)
+            all_candidates.append(candidate)
+            if abs(relative_angle_deg) <= 90.0:
+                forward_candidates.append(candidate)
+
+            angle += float(scan_msg.angle_increment)
+
+        candidate_pool = forward_candidates or all_candidates
+        if not candidate_pool:
+            return None
+
+        best_distance, _alignment, best_relative_angle_deg = min(candidate_pool, key=lambda item: (item[0], item[1]))
+        return best_relative_angle_deg, best_distance
+
+    @staticmethod
+    def _normalize_angle(angle_rad: float) -> float:
+        return math.atan2(math.sin(angle_rad), math.cos(angle_rad))
 
     def _publish_action(self, action_name: str):
         action_cfg = self.actions.get(action_name, self.actions[self.default_action])

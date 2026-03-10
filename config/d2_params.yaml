@@ -14,7 +14,7 @@ epsilon_decay: 0.995
 control_hz: 6.0
 
 # Training budget
-max_episodes: 200
+max_episodes: 500
 max_steps_per_episode: 300
 training_done_stop: true
 checkpoint_every_episodes: 1

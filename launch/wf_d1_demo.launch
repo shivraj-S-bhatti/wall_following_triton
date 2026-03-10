@@ -23,6 +23,10 @@
     <param name="right_front_sector_end_deg" value="70.0"/>
     <param name="right_rear_sector_start_deg" value="-70.0"/>
     <param name="right_rear_sector_end_deg" value="-20.0"/>
+    <param name="acquire_wall_enabled" value="true"/>
+    <param name="acquire_wall_distance" value="1.40"/>
+    <param name="acquire_angle_soft_deg" value="20.0"/>
+    <param name="acquire_angle_hard_deg" value="55.0"/>
 
     <param name="collision_action" value="turn_left_hard"/>
   </node>
