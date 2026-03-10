@@ -8,14 +8,14 @@ alpha: 0.20
 gamma: 0.95
 epsilon: 0.20
 epsilon_min: 0.05
-epsilon_decay: 0.995
+epsilon_decay: 0.997
 
 # Control frequency (Hz). Each timer tick performs one RL step.
 control_hz: 6.0
 
 # Training budget
 max_episodes: 500
-max_steps_per_episode: 300
+max_steps_per_episode: 1000
 training_done_stop: true
 checkpoint_every_episodes: 1
 
