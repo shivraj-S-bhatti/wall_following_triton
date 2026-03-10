@@ -32,6 +32,9 @@ reward_forward_scale: 0.50
 # Collision handling
 collision_distance: 0.30
 collision_penalty: -8.00
+trapped_position_epsilon: 0.03
+trapped_steps_threshold: 6
+trapped_penalty: -4.00
 
 # State encoder thresholds (same baseline as D1)
 front_too_close: 0.55
@@ -55,6 +58,19 @@ random_seed: 603
 # NOTE: adjust these if your map spawn region differs.
 start_poses:
   - {x: 0.00, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: 0.00, y: 0.00, z: 0.10, yaw: 1.57}
+  - {x: 0.00, y: 0.00, z: 0.10, yaw: -1.57}
+  - {x: 0.00, y: 0.00, z: 0.10, yaw: 3.14}
   - {x: 0.50, y: 0.00, z: 0.10, yaw: 1.57}
+  - {x: 0.50, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: 0.50, y: 0.00, z: 0.10, yaw: 3.14}
   - {x: 0.00, y: -0.50, z: 0.10, yaw: -1.57}
+  - {x: 0.00, y: -0.50, z: 0.10, yaw: 0.00}
+  - {x: 0.00, y: -0.50, z: 0.10, yaw: 1.57}
   - {x: -0.50, y: 0.00, z: 0.10, yaw: 3.14}
+  - {x: -0.50, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: -0.50, y: 0.00, z: 0.10, yaw: -1.57}
+  - {x: 0.35, y: 0.35, z: 0.10, yaw: 0.00}
+  - {x: 0.35, y: -0.35, z: 0.10, yaw: 1.57}
+  - {x: -0.35, y: -0.35, z: 0.10, yaw: 3.14}
+  - {x: -0.35, y: 0.35, z: 0.10, yaw: -1.57}

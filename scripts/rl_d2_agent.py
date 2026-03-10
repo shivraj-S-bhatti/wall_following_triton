@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Tuple
 import rospy
 import yaml
 from geometry_msgs.msg import Twist
-from gazebo_msgs.msg import ModelState
+from gazebo_msgs.msg import ModelState, ModelStates
 from gazebo_msgs.srv import SetModelState
 from sensor_msgs.msg import LaserScan
 
@@ -46,6 +46,7 @@ class EpisodeStats:
     total_reward: float
     steps: int
     collisions: int
+    traps: int
 
 
 class RLWallFollowerD2:
@@ -110,6 +111,9 @@ class RLWallFollowerD2:
         # Terminal collision condition and penalty.
         self.collision_distance = float(rospy.get_param("~collision_distance", 0.30))
         self.collision_penalty = float(rospy.get_param("~collision_penalty", -8.00))
+        self.trapped_position_epsilon = float(rospy.get_param("~trapped_position_epsilon", 0.03))
+        self.trapped_steps_threshold = int(rospy.get_param("~trapped_steps_threshold", 6))
+        self.trapped_penalty = float(rospy.get_param("~trapped_penalty", -4.00))
 
         # -----------------------------
         # 4) Files and reproducibility
@@ -174,6 +178,12 @@ class RLWallFollowerD2:
         self.episode_step = 0
         self.episode_reward = 0.0
         self.episode_collisions = 0
+        self.episode_traps = 0
+
+        # Trap detection state.
+        self.latest_robot_position: Optional[Tuple[float, float]] = None
+        self.prev_robot_position: Optional[Tuple[float, float]] = None
+        self.stationary_steps = 0
 
         # Keep best reward and persist best policy.
         self.best_episode_reward = float("-inf")
@@ -186,6 +196,7 @@ class RLWallFollowerD2:
         # -----------------------------
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=10)
         self.scan_sub = rospy.Subscriber(self.scan_topic, LaserScan, self._scan_callback, queue_size=1)
+        self.model_states_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self._model_states_callback, queue_size=1)
 
         self.set_model_state_srv = None
         if self.mode == "train":
@@ -277,6 +288,15 @@ class RLWallFollowerD2:
     def _scan_callback(self, msg: LaserScan):
         self.latest_scan = msg
 
+    def _model_states_callback(self, msg: ModelStates):
+        try:
+            idx = msg.name.index(self.robot_model_name)
+        except ValueError:
+            return
+
+        pose = msg.pose[idx].position
+        self.latest_robot_position = (float(pose.x), float(pose.y))
+
     def _on_control_tick(self, _event):
         """Single periodic step for either testing or training.
 
@@ -327,11 +347,15 @@ class RLWallFollowerD2:
 
         # Build reward from *resulting* state after previous action.
         reward = self._compute_reward(current_state, self.prev_action)
-        done = self._is_terminal(current_state)
+        termination_reason = self._termination_reason(current_state)
+        done = termination_reason is not None
 
-        if done:
+        if termination_reason == "collision":
             reward += self.collision_penalty
             self.episode_collisions += 1
+        elif termination_reason == "trapped":
+            reward += self.trapped_penalty
+            self.episode_traps += 1
 
         self.episode_reward += reward
 
@@ -356,7 +380,7 @@ class RLWallFollowerD2:
 
         # Episode stop criteria.
         if done or self.episode_step >= self.max_steps_per_episode:
-            reason = "collision" if done else "max_steps"
+            reason = termination_reason or "max_steps"
             self._finish_episode(reason=reason)
             return
 
@@ -425,9 +449,33 @@ class RLWallFollowerD2:
         cfg = self.actions[action_name]
         return max(abs(float(cfg["linear_x"])), abs(float(cfg["linear_y"])))
 
-    def _is_terminal(self, state: EncodedState) -> bool:
+    def _termination_reason(self, state: EncodedState) -> Optional[str]:
         # Terminal if robot gets dangerously close ahead.
-        return bool(state.front_min < self.collision_distance)
+        if state.front_min < self.collision_distance:
+            return "collision"
+        if self._is_trapped():
+            return "trapped"
+        return None
+
+    def _is_trapped(self) -> bool:
+        if self.latest_robot_position is None:
+            return False
+        if self.prev_robot_position is None:
+            self.prev_robot_position = self.latest_robot_position
+            self.stationary_steps = 0
+            return False
+
+        dx = self.latest_robot_position[0] - self.prev_robot_position[0]
+        dy = self.latest_robot_position[1] - self.prev_robot_position[1]
+        distance = math.hypot(dx, dy)
+        self.prev_robot_position = self.latest_robot_position
+
+        if distance <= self.trapped_position_epsilon:
+            self.stationary_steps += 1
+        else:
+            self.stationary_steps = 0
+
+        return self.stationary_steps >= self.trapped_steps_threshold
 
     # ---------------------------------------------------------------------
     # Episode transitions and persistence
@@ -438,16 +486,18 @@ class RLWallFollowerD2:
             total_reward=self.episode_reward,
             steps=self.episode_step,
             collisions=self.episode_collisions,
+            traps=self.episode_traps,
         )
         self.episode_history.append(stats)
 
         rospy.loginfo(
-            "Episode %d finished (%s): reward=%.3f steps=%d collisions=%d",
+            "Episode %d finished (%s): reward=%.3f steps=%d collisions=%d traps=%d",
             stats.episode_idx,
             reason,
             stats.total_reward,
             stats.steps,
             stats.collisions,
+            stats.traps,
         )
 
         # Track best policy by reward and persist immediately.
@@ -483,6 +533,9 @@ class RLWallFollowerD2:
         self.episode_step = 0
         self.episode_reward = 0.0
         self.episode_collisions = 0
+        self.episode_traps = 0
+        self.prev_robot_position = None
+        self.stationary_steps = 0
 
         self._publish_stop()
 
