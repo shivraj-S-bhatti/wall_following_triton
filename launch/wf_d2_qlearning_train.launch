@@ -1,7 +1,7 @@
 <launch>
   <arg name="qtable_input_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
-  <arg name="qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_qlearning_best.yaml"/>
-  <arg name="latest_qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_qlearning_latest.yaml"/>
+  <arg name="qtable_output_path" default="$(find wall_following_triton)/artifacts/qtable_d2_qlearning_best.yaml"/>
+  <arg name="latest_qtable_output_path" default="$(find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml"/>
   <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_qlearning_metrics.csv"/>
   <arg name="control_hz" default="6.0"/>
   <arg name="max_episodes" default="320"/>
