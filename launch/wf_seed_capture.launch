@@ -1,11 +1,8 @@
 <launch>
+  <!--
+    Convenience launch for manually driving Triton to useful reset poses.
+    Run pose_capture.py and triton_key_teleop.py in separate terminals so
+    both retain interactive keyboard input.
+  -->
   <include file="$(find stingray_sim)/launch/wall_following.launch"/>
-
-  <node pkg="wall_following_triton"
-        type="pose_capture.py"
-        name="pose_capture"
-        output="screen">
-    <param name="robot_model_name" value="triton"/>
-    <param name="output_path" value="$(find wall_following_triton)/artifacts/captured_start_poses.yaml"/>
-  </node>
 </launch>
