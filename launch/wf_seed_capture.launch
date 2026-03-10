@@ -1,0 +1,11 @@
+<launch>
+  <include file="$(find stingray_sim)/launch/wall_following.launch"/>
+
+  <node pkg="wall_following_triton"
+        type="pose_capture.py"
+        name="pose_capture"
+        output="screen">
+    <param name="robot_model_name" value="triton"/>
+    <param name="output_path" value="$(find wall_following_triton)/artifacts/captured_start_poses.yaml"/>
+  </node>
+</launch>

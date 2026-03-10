@@ -11,8 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package()
 
 catkin_install_python(PROGRAMS
+  scripts/pose_capture.py
   scripts/rl_d2_agent.py
   scripts/state_encoder.py
+  scripts/triton_key_teleop.py
   scripts/wf_policy_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

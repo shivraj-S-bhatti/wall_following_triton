@@ -11,7 +11,7 @@ epsilon_min: 0.05
 epsilon_decay: 0.996
 
 # Control frequency (Hz). Each timer tick performs one RL step.
-control_hz: 8.0
+control_hz: 6.0
 
 # Training budget
 max_episodes: 320
