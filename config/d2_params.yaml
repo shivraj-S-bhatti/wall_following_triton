@@ -8,16 +8,17 @@ alpha: 0.20
 gamma: 0.95
 epsilon: 0.20
 epsilon_min: 0.05
-epsilon_decay: 0.997
+epsilon_decay: 0.996
 
 # Control frequency (Hz). Each timer tick performs one RL step.
-control_hz: 6.0
+control_hz: 8.0
 
 # Training budget
-max_episodes: 500
-max_steps_per_episode: 1000
+max_episodes: 320
+max_steps_per_episode: 700
 training_done_stop: true
 checkpoint_every_episodes: 1
+resume_training_state: true
 
 # Reward shaping terms
 reward_right_good: 1.00
@@ -62,16 +63,23 @@ start_poses:
   - {x: 0.00, y: 0.00, z: 0.10, yaw: 1.57}
   - {x: 0.00, y: 0.00, z: 0.10, yaw: -1.57}
   - {x: 0.00, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: 0.50, y: 0.00, z: 0.10, yaw: 1.57}
-  - {x: 0.50, y: 0.00, z: 0.10, yaw: 0.00}
-  - {x: 0.50, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: 0.00, y: -0.50, z: 0.10, yaw: -1.57}
-  - {x: 0.00, y: -0.50, z: 0.10, yaw: 0.00}
-  - {x: 0.00, y: -0.50, z: 0.10, yaw: 1.57}
-  - {x: -0.50, y: 0.00, z: 0.10, yaw: 3.14}
-  - {x: -0.50, y: 0.00, z: 0.10, yaw: 0.00}
-  - {x: -0.50, y: 0.00, z: 0.10, yaw: -1.57}
-  - {x: 0.35, y: 0.35, z: 0.10, yaw: 0.00}
-  - {x: 0.35, y: -0.35, z: 0.10, yaw: 1.57}
-  - {x: -0.35, y: -0.35, z: 0.10, yaw: 3.14}
-  - {x: -0.35, y: 0.35, z: 0.10, yaw: -1.57}
+  - {x: 0.75, y: 0.00, z: 0.10, yaw: 1.57}
+  - {x: 0.75, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: 0.75, y: 0.00, z: 0.10, yaw: 3.14}
+  - {x: -0.75, y: 0.00, z: 0.10, yaw: -1.57}
+  - {x: -0.75, y: 0.00, z: 0.10, yaw: 0.00}
+  - {x: -0.75, y: 0.00, z: 0.10, yaw: 3.14}
+  - {x: 0.00, y: -0.75, z: 0.10, yaw: -1.57}
+  - {x: 0.00, y: -0.75, z: 0.10, yaw: 0.00}
+  - {x: 0.00, y: -0.75, z: 0.10, yaw: 1.57}
+  - {x: 0.00, y: 0.75, z: 0.10, yaw: 1.57}
+  - {x: 0.00, y: 0.75, z: 0.10, yaw: 0.00}
+  - {x: 0.00, y: 0.75, z: 0.10, yaw: 3.14}
+  - {x: 0.55, y: 0.55, z: 0.10, yaw: 0.00}
+  - {x: 0.55, y: 0.55, z: 0.10, yaw: 1.57}
+  - {x: 0.55, y: -0.55, z: 0.10, yaw: -1.57}
+  - {x: 0.55, y: -0.55, z: 0.10, yaw: 0.00}
+  - {x: -0.55, y: 0.55, z: 0.10, yaw: 3.14}
+  - {x: -0.55, y: 0.55, z: 0.10, yaw: -1.57}
+  - {x: -0.55, y: -0.55, z: 0.10, yaw: 3.14}
+  - {x: -0.55, y: -0.55, z: 0.10, yaw: 0.00}

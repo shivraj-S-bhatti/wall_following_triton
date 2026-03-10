@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+headless=0
+if [[ ${1:-} == "--headless" ]]; then
+  headless=1
+  shift
+fi
+
 if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <package> <launchfile> [roslaunch args...]" >&2
+  echo "Usage: $0 [--headless] <package> <launchfile> [roslaunch args...]" >&2
   exit 64
 fi
 
@@ -29,6 +35,15 @@ fi
 if [[ -f "${HOME}/catkin_ws/devel/setup.bash" ]]; then
   # shellcheck disable=SC1091
   source "${HOME}/catkin_ws/devel/setup.bash"
+fi
+
+if [[ ${headless} -eq 1 ]]; then
+  # Gazebo GUI is expensive inside a VM. Kill only the client after launch;
+  # gzserver keeps training and physics running headlessly.
+  (
+    sleep 8
+    pkill -f gzclient >/dev/null 2>&1 || true
+  ) &
 fi
 
 roslaunch "$@"

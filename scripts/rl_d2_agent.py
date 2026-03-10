@@ -125,6 +125,7 @@ class RLWallFollowerD2:
         latest_qtable_output_path = str(rospy.get_param("~latest_qtable_output_path", "")).strip()
         self.metrics_csv_path = rospy.get_param("~metrics_csv_path")
         self.latest_qtable_output_path = latest_qtable_output_path or self._derive_latest_qtable_path(self.qtable_output_path)
+        self.resume_training_state = bool(rospy.get_param("~resume_training_state", True))
 
         # In test mode, we always act greedily. In train mode, we start with epsilon-greedy.
         self.exploration_enabled = self.mode == "train"
@@ -162,6 +163,7 @@ class RLWallFollowerD2:
         self.actions = self._load_actions(self.actions_path)
 
         # Initialize Q-table from file and fill any missing state-action entries.
+        self.loaded_qtable_metadata: Dict[str, object] = {}
         self.q_table = self._load_q_table(self.qtable_input_path)
         self._ensure_dense_q_table()
 
@@ -191,6 +193,7 @@ class RLWallFollowerD2:
 
         # For diagnostics and plotting.
         self.episode_history: List[EpisodeStats] = []
+        self._restore_training_state_if_requested()
 
         # -----------------------------
         # 8) ROS publishers/subscribers/services
@@ -245,10 +248,14 @@ class RLWallFollowerD2:
     def _load_q_table(self, path: str) -> Dict[str, Dict[str, float]]:
         if not os.path.exists(path):
             rospy.logwarn("Q-table file %s not found. Starting from zeros.", path)
+            self.loaded_qtable_metadata = {}
             return {}
 
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
+
+        metadata = data.get("metadata", {})
+        self.loaded_qtable_metadata = metadata if isinstance(metadata, dict) else {}
 
         raw_states = data.get("states", {})
         q_table: Dict[str, Dict[str, float]] = {}
@@ -282,6 +289,53 @@ class RLWallFollowerD2:
         if ext:
             return f"{root}_latest{ext}"
         return f"{best_path}_latest"
+
+    def _restore_training_state_if_requested(self):
+        if self.mode != "train" or not self.resume_training_state:
+            return
+        if "_latest" not in os.path.basename(self.qtable_input_path):
+            return
+
+        resumed_episode_idx = 0
+        best_reward = float("-inf")
+
+        if os.path.exists(self.metrics_csv_path):
+            try:
+                with open(self.metrics_csv_path, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            resumed_episode_idx = max(resumed_episode_idx, int(row["episode"]) + 1)
+                            best_reward = max(best_reward, float(row["reward"]))
+                        except (KeyError, TypeError, ValueError):
+                            continue
+            except OSError as exc:
+                rospy.logwarn("Failed to inspect metrics CSV for resume state: %s", exc)
+
+        metadata_epsilon = self.loaded_qtable_metadata.get("epsilon")
+        try:
+            if metadata_epsilon is not None:
+                self.epsilon = max(self.epsilon_min, float(metadata_epsilon))
+        except (TypeError, ValueError):
+            pass
+
+        metadata_completed = self.loaded_qtable_metadata.get("completed_episodes")
+        try:
+            if metadata_completed is not None:
+                resumed_episode_idx = max(resumed_episode_idx, int(metadata_completed))
+        except (TypeError, ValueError):
+            pass
+
+        if best_reward > float("-inf"):
+            self.best_episode_reward = best_reward
+        self.episode_idx = resumed_episode_idx
+
+        rospy.loginfo(
+            "Resuming training state: episode_idx=%d epsilon=%.3f best_reward=%.3f",
+            self.episode_idx,
+            self.epsilon,
+            self.best_episode_reward,
+        )
 
     # ---------------------------------------------------------------------
     # ROS callbacks
@@ -519,12 +573,12 @@ class RLWallFollowerD2:
 
         # Append one row to metrics CSV after every episode.
         self._append_metrics_row(stats)
-        self._save_latest_checkpoint(stats.episode_idx + 1)
 
         # Exponential epsilon decay after each episode.
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
 
         self.episode_idx += 1
+        self._save_latest_checkpoint(self.episode_idx)
 
         if self.episode_idx >= self.max_episodes:
             # Preserve the separately tracked best policy and only refresh the
@@ -599,6 +653,7 @@ class RLWallFollowerD2:
                 "gamma": self.gamma,
                 "epsilon": self.epsilon,
                 "random_seed": self.random_seed,
+                "completed_episodes": self.episode_idx,
             },
             "states": self.q_table,
         }
