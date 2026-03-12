@@ -19,6 +19,7 @@ max_steps_per_episode: 500
 training_done_stop: true
 checkpoint_every_episodes: 1
 resume_training_state: true
+reset_settle_seconds: 0.20
 
 # Reward shaping terms
 reward_right_good: 1.00
@@ -37,6 +38,8 @@ trapped_position_epsilon: 0.008
 trapped_yaw_epsilon: 0.08
 trapped_steps_threshold: 12
 trapped_penalty: -4.00
+tilt_termination_deg: 55.0
+z_termination_height: 0.25
 
 # Test-mode acquisition prior for arbitrary spawn points.
 # Handoff matches the wall-following state threshold so test-time search does
@@ -66,9 +69,9 @@ random_seed: 603
 # Candidate start poses used in train mode episode resets.
 # NOTE: adjust these if your map spawn region differs.
 start_poses:
-  - {x: -3.088, y: 0.778, z: 0.10, yaw: 0.010}
-  - {x: 1.286, y: 1.052, z: 0.10, yaw: 0.022}
-  - {x: 1.460, y: -1.223, z: 0.10, yaw: 0.079}
-  - {x: 3.343, y: -2.177, z: 0.10, yaw: -1.981}
-  - {x: 3.157, y: 3.185, z: 0.10, yaw: -1.425}
-  - {x: -2.597, y: 3.086, z: 0.10, yaw: -1.433}
+  - {x: -3.088, y: 0.778, z: 0.00, yaw: 0.010}
+  - {x: 1.286, y: 1.052, z: 0.00, yaw: 0.022}
+  - {x: 1.460, y: -1.223, z: 0.00, yaw: 0.079}
+  - {x: 3.343, y: -2.177, z: 0.00, yaw: -1.981}
+  - {x: 3.157, y: 3.185, z: 0.00, yaw: -1.425}
+  - {x: -2.597, y: 3.086, z: 0.00, yaw: -1.433}

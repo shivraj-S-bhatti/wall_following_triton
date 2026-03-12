@@ -25,6 +25,7 @@ from geometry_msgs.msg import Twist
 from gazebo_msgs.msg import ModelState, ModelStates
 from gazebo_msgs.srv import SetModelState
 from sensor_msgs.msg import LaserScan
+from std_srvs.srv import Empty
 
 # Keep local imports working both in source tree and installed catkin wrappers.
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -93,6 +94,7 @@ class RLWallFollowerD2:
         self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 500))
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
         self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
+        self.reset_settle_seconds = float(rospy.get_param("~reset_settle_seconds", 0.20))
 
         # -----------------------------
         # 3) Reward shaping config
@@ -118,6 +120,8 @@ class RLWallFollowerD2:
         self.trapped_yaw_epsilon = float(rospy.get_param("~trapped_yaw_epsilon", 0.08))
         self.trapped_steps_threshold = int(rospy.get_param("~trapped_steps_threshold", 12))
         self.trapped_penalty = float(rospy.get_param("~trapped_penalty", -4.00))
+        self.tilt_termination_deg = float(rospy.get_param("~tilt_termination_deg", 55.0))
+        self.z_termination_height = float(rospy.get_param("~z_termination_height", 0.25))
 
         # -----------------------------
         # 4) Files and reproducibility
@@ -187,8 +191,8 @@ class RLWallFollowerD2:
         self.episode_traps = 0
 
         # Trap detection state.
-        self.latest_robot_pose: Optional[Tuple[float, float, float]] = None
-        self.prev_robot_pose: Optional[Tuple[float, float, float]] = None
+        self.latest_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
+        self.prev_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
         self.stationary_steps = 0
 
         # Keep best reward and persist best policy.
@@ -206,10 +210,19 @@ class RLWallFollowerD2:
         self.model_states_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self._model_states_callback, queue_size=1)
 
         self.set_model_state_srv = None
+        self.pause_physics_srv = None
+        self.unpause_physics_srv = None
+        self.reset_world_srv = None
         if self.mode == "train":
             # We use Gazebo reset-by-pose to start new episodes from varied initial states.
             rospy.wait_for_service("/gazebo/set_model_state", timeout=20.0)
+            rospy.wait_for_service("/gazebo/pause_physics", timeout=20.0)
+            rospy.wait_for_service("/gazebo/unpause_physics", timeout=20.0)
+            rospy.wait_for_service("/gazebo/reset_world", timeout=20.0)
             self.set_model_state_srv = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
+            self.pause_physics_srv = rospy.ServiceProxy("/gazebo/pause_physics", Empty)
+            self.unpause_physics_srv = rospy.ServiceProxy("/gazebo/unpause_physics", Empty)
+            self.reset_world_srv = rospy.ServiceProxy("/gazebo/reset_world", Empty)
 
         # Fixed control loop timer drives both acting and learning updates.
         self.control_timer = rospy.Timer(rospy.Duration(1.0 / max(self.control_hz, 1.0)), self._on_control_tick)
@@ -355,11 +368,26 @@ class RLWallFollowerD2:
         pose = msg.pose[idx]
         position = pose.position
         orientation = pose.orientation
+        qx = float(orientation.x)
+        qy = float(orientation.y)
+        qz = float(orientation.z)
+        qw = float(orientation.w)
+
+        sinr_cosp = 2.0 * (qw * qx + qy * qz)
+        cosr_cosp = 1.0 - 2.0 * (qx * qx + qy * qy)
+        roll = math.atan2(sinr_cosp, cosr_cosp)
+
+        sinp = 2.0 * (qw * qy - qz * qx)
+        if abs(sinp) >= 1.0:
+            pitch = math.copysign(math.pi / 2.0, sinp)
+        else:
+            pitch = math.asin(sinp)
+
         yaw = math.atan2(
-            2.0 * (float(orientation.w) * float(orientation.z) + float(orientation.x) * float(orientation.y)),
-            1.0 - 2.0 * (float(orientation.y) ** 2 + float(orientation.z) ** 2),
+            2.0 * (qw * qz + qx * qy),
+            1.0 - 2.0 * (qy * qy + qz * qz),
         )
-        self.latest_robot_pose = (float(position.x), float(position.y), yaw)
+        self.latest_robot_pose = (float(position.x), float(position.y), float(position.z), roll, pitch, yaw)
 
     def _on_control_tick(self, _event):
         """Single periodic step for either testing or training.
@@ -414,7 +442,7 @@ class RLWallFollowerD2:
         termination_reason = self._termination_reason(current_state)
         done = termination_reason is not None
 
-        if termination_reason == "collision":
+        if termination_reason in {"collision", "flipped"}:
             reward += self.collision_penalty
             self.episode_collisions += 1
         elif termination_reason == "trapped":
@@ -536,6 +564,8 @@ class RLWallFollowerD2:
         # Terminal if robot gets dangerously close ahead.
         if state.front_min < self.collision_distance:
             return "collision"
+        if self._is_flipped():
+            return "flipped"
         if self._is_trapped():
             return "trapped"
         return None
@@ -552,8 +582,8 @@ class RLWallFollowerD2:
         dy = self.latest_robot_pose[1] - self.prev_robot_pose[1]
         distance = math.hypot(dx, dy)
         yaw_delta = abs(math.atan2(
-            math.sin(self.latest_robot_pose[2] - self.prev_robot_pose[2]),
-            math.cos(self.latest_robot_pose[2] - self.prev_robot_pose[2]),
+            math.sin(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
+            math.cos(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
         ))
         self.prev_robot_pose = self.latest_robot_pose
 
@@ -563,6 +593,21 @@ class RLWallFollowerD2:
             self.stationary_steps = 0
 
         return self.stationary_steps >= self.trapped_steps_threshold
+
+    def _is_flipped(self) -> bool:
+        if self.latest_robot_pose is None:
+            return False
+
+        z = self.latest_robot_pose[2]
+        roll = abs(self.latest_robot_pose[3])
+        pitch = abs(self.latest_robot_pose[4])
+        tilt_limit_rad = math.radians(self.tilt_termination_deg)
+
+        if z > self.z_termination_height:
+            return True
+        if roll >= tilt_limit_rad or pitch >= tilt_limit_rad:
+            return True
+        return False
 
     # ---------------------------------------------------------------------
     # Episode transitions and persistence
@@ -629,19 +674,39 @@ class RLWallFollowerD2:
         if self.set_model_state_srv is not None and self.start_poses:
             try:
                 pose_cfg = random.choice(self.start_poses)
-                self._set_robot_pose(pose_cfg)
+                self._reset_robot_pose_safely(pose_cfg)
             except Exception as exc:
                 rospy.logwarn("Episode reset pose failed after '%s': %s", reason, exc)
+
+    def _reset_robot_pose_safely(self, pose_cfg: dict):
+        for _ in range(3):
+            self._publish_stop()
+
+        if self.pause_physics_srv is not None:
+            self.pause_physics_srv()
+        if self.reset_world_srv is not None:
+            self.reset_world_srv()
+
+        self._set_robot_pose(pose_cfg)
+
+        for _ in range(3):
+            self._publish_stop()
+
+        if self.unpause_physics_srv is not None:
+            self.unpause_physics_srv()
+        if self.reset_settle_seconds > 0.0:
+            rospy.sleep(self.reset_settle_seconds)
+        self._publish_stop()
 
     def _set_robot_pose(self, pose_cfg: dict):
         """Set robot pose using /gazebo/set_model_state.
 
         pose_cfg example:
-          {x: 0.0, y: 0.0, z: 0.10, yaw: 1.57}
+          {x: 0.0, y: 0.0, z: 0.00, yaw: 1.57}
         """
         x = float(pose_cfg.get("x", 0.0))
         y = float(pose_cfg.get("y", 0.0))
-        z = float(pose_cfg.get("z", 0.10))
+        z = float(pose_cfg.get("z", 0.00))
         yaw = float(pose_cfg.get("yaw", 0.0))
 
         state = ModelState()
