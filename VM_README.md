@@ -40,6 +40,14 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh load pre_pull_20260312_203000
 ```
 
+One-time repair for old legacy checkpoints that still live in `config/`:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh adopt-legacy q_learning
+./scripts/d2_state.sh adopt-legacy sarsa
+```
+
 ## One-Time Spawn Seed Capture
 
 Use this once to manually find good start poses for training.

@@ -104,6 +104,7 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh save pre_pull_$(date +%Y%m%d_%H%M%S)
 ./scripts/d2_state.sh load pre_pull_20260312_203000
 ./scripts/d2_state.sh discard current
+./scripts/d2_state.sh adopt-legacy q_learning
 ```
 
 This script:

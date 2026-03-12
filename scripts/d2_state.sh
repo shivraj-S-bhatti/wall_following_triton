@@ -15,6 +15,7 @@ Usage:
   ./scripts/d2_state.sh save <label>
   ./scripts/d2_state.sh load <label>
   ./scripts/d2_state.sh discard current
+  ./scripts/d2_state.sh adopt-legacy <q_learning|sarsa>
   ./scripts/d2_state.sh promote <q_learning|sarsa> <best|latest>
 
 Notes:
@@ -242,6 +243,33 @@ promote_live_policy() {
   echo "Promoted ${src} -> ${dest}"
 }
 
+adopt_legacy_checkpoint() {
+  local algo="$1"
+  local legacy_latest legacy_best
+  legacy_latest="$(legacy_config_latest_path "${algo}")"
+  legacy_best="$(config_best_path "${algo}")"
+
+  [[ -f "${legacy_latest}" ]] || {
+    echo "Legacy checkpoint not found: ${legacy_latest}" >&2
+    exit 69
+  }
+
+  local stamp dest
+  stamp="$(date +%Y%m%d_%H%M%S)"
+  dest="${DISCARDED_DIR}/${stamp}_adopt_legacy_${algo}/artifacts"
+  mkdir -p "${dest}"
+
+  move_if_exists "$(artifact_latest_path "${algo}")" "${dest}"
+  move_if_exists "$(artifact_best_path "${algo}")" "${dest}"
+
+  cp -f "${legacy_latest}" "$(artifact_latest_path "${algo}")"
+  if [[ -f "${legacy_best}" ]]; then
+    cp -f "${legacy_best}" "$(artifact_best_path "${algo}")"
+  fi
+
+  echo "Adopted legacy config checkpoint for ${algo} into live artifacts."
+}
+
 status() {
   echo "Repo: ${ROOT_DIR}"
   echo
@@ -336,6 +364,14 @@ main() {
         exit 64
       fi
       promote_live_policy "$1" "$2"
+      ;;
+    adopt-legacy)
+      shift
+      if [[ $# -ne 1 ]]; then
+        echo "Usage: ./scripts/d2_state.sh adopt-legacy <q_learning|sarsa>" >&2
+        exit 64
+      fi
+      adopt_legacy_checkpoint "$1"
       ;;
     ""|-h|--help|help)
       usage
