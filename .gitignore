@@ -6,4 +6,7 @@ __pycache__/
 .DS_Store
 artifacts/*.csv
 artifacts/*.yaml
+artifacts/checkpoints/
+artifacts/discarded/
+artifacts/runs/
 config/qtable_d2_*_latest.yaml

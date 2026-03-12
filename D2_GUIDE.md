@@ -30,6 +30,10 @@ Algorithms supported:
 - `artifacts/qtable_d2_qlearning_best.yaml`
 - `artifacts/qtable_d2_sarsa_best.yaml`
   - Live learned policies during training
+- `artifacts/runs/<algorithm>/<run_id>/`
+  - Timestamped per-run snapshots mirrored automatically during training
+- `scripts/d2_state.sh`
+  - One-command state management for save/load/discard/promote
 - `config/qtable_d2_qlearning_best.yaml`
 - `config/qtable_d2_sarsa_best.yaml`
   - Final promoted policies used in testing/submission mode
@@ -54,6 +58,7 @@ roslaunch wall_following_triton wf_d2_qlearning_train.launch
 Outputs:
 - learned policy saved to: `artifacts/qtable_d2_qlearning_best.yaml`
 - metrics CSV saved to: `artifacts/d2_qlearning_metrics.csv`
+- mirrored run snapshot saved to: `artifacts/runs/q_learning/<run_id>/`
 
 ### SARSA training
 
@@ -64,6 +69,7 @@ roslaunch wall_following_triton wf_d2_sarsa_train.launch
 Outputs:
 - learned policy saved to: `artifacts/qtable_d2_sarsa_best.yaml`
 - metrics CSV saved to: `artifacts/d2_sarsa_metrics.csv`
+- mirrored run snapshot saved to: `artifacts/runs/sarsa/<run_id>/`
 
 ## 5) Run testing (learned policy only)
 
@@ -102,6 +108,18 @@ Important design choice:
 - training is pure RL
 - the acquisition pre-controller is reserved for `test` mode only
 - this prevents search heuristics from polluting TD updates
+
+## 6.5) Save / load / discard state without manual copying
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh status
+./scripts/d2_state.sh save before_pull_$(date +%Y%m%d_%H%M%S)
+./scripts/d2_state.sh load before_pull_20260312_203000
+./scripts/d2_state.sh discard current
+```
+
+Use this instead of ad hoc copying between `artifacts/` and `config/`.
 
 ## 7) Most important tuning knobs
 

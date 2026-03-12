@@ -15,8 +15,10 @@ import csv
 import math
 import os
 import random
+import shutil
 import sys
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import rospy
@@ -95,6 +97,7 @@ class RLWallFollowerD2:
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
         self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
         self.reset_settle_seconds = float(rospy.get_param("~reset_settle_seconds", 0.20))
+        self.reset_retry_attempts = max(1, int(rospy.get_param("~reset_retry_attempts", 3)))
 
         # -----------------------------
         # 3) Reward shaping config
@@ -174,6 +177,25 @@ class RLWallFollowerD2:
         self.q_table = self._load_q_table(self.qtable_input_path)
         self._ensure_dense_q_table()
 
+        # Every training run gets a stable run_id so checkpoints can live in a
+        # timestamped folder that git will never touch. If we resume from a
+        # modern checkpoint, keep using its run_id.
+        self.run_id = self._resolve_run_id()
+        self.run_started_at_utc = self._resolve_run_started_at()
+        self.training_finished_at_utc: Optional[str] = None
+        configured_run_dir = str(rospy.get_param("~run_artifact_dir", "")).strip()
+        self.run_artifact_dir = configured_run_dir or self._default_run_artifact_dir()
+        self.run_qtable_output_path = os.path.join(
+            self.run_artifact_dir, os.path.basename(self.qtable_output_path)
+        )
+        self.run_latest_qtable_output_path = os.path.join(
+            self.run_artifact_dir, os.path.basename(self.latest_qtable_output_path)
+        )
+        self.run_metrics_csv_path = os.path.join(
+            self.run_artifact_dir, os.path.basename(self.metrics_csv_path)
+        )
+        self._prime_run_artifacts()
+
         # -----------------------------
         # 7) Runtime state variables
         # -----------------------------
@@ -237,6 +259,7 @@ class RLWallFollowerD2:
             self.latest_qtable_output_path,
             self.checkpoint_every_episodes,
         )
+        rospy.loginfo("run_id=%s run_artifact_dir=%s", self.run_id, self.run_artifact_dir)
 
         # Begin from a known start pose in train mode.
         if self.mode == "train":
@@ -305,6 +328,55 @@ class RLWallFollowerD2:
         if ext:
             return f"{root}_latest{ext}"
         return f"{best_path}_latest"
+
+    @staticmethod
+    def _utc_now() -> datetime:
+        return datetime.now(timezone.utc)
+
+    @classmethod
+    def _utc_stamp(cls) -> str:
+        return cls._utc_now().strftime("%Y%m%d_%H%M%S")
+
+    @classmethod
+    def _utc_iso(cls) -> str:
+        return cls._utc_now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    def _resolve_run_id(self) -> str:
+        run_id = str(self.loaded_qtable_metadata.get("run_id", "")).strip()
+        return run_id or self._utc_stamp()
+
+    def _resolve_run_started_at(self) -> str:
+        started = str(self.loaded_qtable_metadata.get("run_started_at_utc", "")).strip()
+        return started or self._utc_iso()
+
+    def _default_run_artifact_dir(self) -> str:
+        base_artifact_dir = os.path.dirname(self.metrics_csv_path) or "."
+        return os.path.join(base_artifact_dir, "runs", self.algorithm, self.run_id)
+
+    def _prime_run_artifacts(self):
+        os.makedirs(self.run_artifact_dir, exist_ok=True)
+
+        if (
+            self.mode == "train"
+            and os.path.exists(self.metrics_csv_path)
+            and not os.path.exists(self.run_metrics_csv_path)
+        ):
+            shutil.copyfile(self.metrics_csv_path, self.run_metrics_csv_path)
+
+        if (
+            self.mode == "train"
+            and "_latest" in os.path.basename(self.qtable_input_path)
+            and os.path.exists(self.qtable_input_path)
+            and not os.path.exists(self.run_latest_qtable_output_path)
+        ):
+            shutil.copyfile(self.qtable_input_path, self.run_latest_qtable_output_path)
+
+        if (
+            self.mode == "train"
+            and os.path.exists(self.qtable_output_path)
+            and not os.path.exists(self.run_qtable_output_path)
+        ):
+            shutil.copyfile(self.qtable_output_path, self.run_qtable_output_path)
 
     def _restore_training_state_if_requested(self):
         if self.mode != "train" or not self.resume_training_state:
@@ -636,6 +708,8 @@ class RLWallFollowerD2:
         if stats.total_reward > self.best_episode_reward:
             self.best_episode_reward = stats.total_reward
             self._save_q_table(self.qtable_output_path)
+            if self.run_qtable_output_path != self.qtable_output_path:
+                self._save_q_table(self.run_qtable_output_path)
             rospy.loginfo("New best policy saved (reward=%.3f)", self.best_episode_reward)
 
         # Append one row to metrics CSV after every episode.
@@ -650,7 +724,10 @@ class RLWallFollowerD2:
         if self.episode_idx >= self.max_episodes:
             # Preserve the separately tracked best policy and only refresh the
             # resumable/latest checkpoint at training end.
+            self.training_finished_at_utc = self._utc_iso()
             self._save_q_table(self.latest_qtable_output_path)
+            if self.run_latest_qtable_output_path != self.latest_qtable_output_path:
+                self._save_q_table(self.run_latest_qtable_output_path)
             rospy.loginfo("Training finished at episode %d", self.episode_idx)
             if self.training_done_stop:
                 self._publish_stop()
@@ -673,8 +750,20 @@ class RLWallFollowerD2:
 
         if self.set_model_state_srv is not None and self.start_poses:
             try:
-                pose_cfg = random.choice(self.start_poses)
-                self._reset_robot_pose_safely(pose_cfg)
+                pose_pool = list(self.start_poses)
+                random.shuffle(pose_pool)
+                pose_pool = pose_pool[: self.reset_retry_attempts]
+
+                reset_ok = False
+                for pose_cfg in pose_pool:
+                    self._reset_robot_pose_safely(pose_cfg)
+                    if not self._is_flipped():
+                        reset_ok = True
+                        break
+                    rospy.logwarn("Reset pose rejected due to 3D instability: %s", pose_cfg)
+
+                if not reset_ok:
+                    rospy.logwarn("All reset attempts failed after '%s'; keeping last pose.", reason)
             except Exception as exc:
                 rospy.logwarn("Episode reset pose failed after '%s': %s", reason, exc)
 
@@ -732,6 +821,7 @@ class RLWallFollowerD2:
 
     def _save_q_table(self, path: str):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        saved_at = self._utc_iso()
         payload = {
             "metadata": {
                 "algorithm": self.algorithm,
@@ -741,6 +831,11 @@ class RLWallFollowerD2:
                 "epsilon": self.epsilon,
                 "random_seed": self.random_seed,
                 "completed_episodes": self.episode_idx,
+                "run_id": self.run_id,
+                "run_started_at_utc": self.run_started_at_utc,
+                "last_saved_at_utc": saved_at,
+                "run_finished_at_utc": self.training_finished_at_utc,
+                "source_qtable_path": self.qtable_input_path,
             },
             "states": self.q_table,
         }
@@ -753,12 +848,19 @@ class RLWallFollowerD2:
         if completed_episodes % self.checkpoint_every_episodes != 0:
             return
         self._save_q_table(self.latest_qtable_output_path)
+        if self.run_latest_qtable_output_path != self.latest_qtable_output_path:
+            self._save_q_table(self.run_latest_qtable_output_path)
 
     def _append_metrics_row(self, stats: EpisodeStats):
-        os.makedirs(os.path.dirname(self.metrics_csv_path) or ".", exist_ok=True)
-        file_exists = os.path.exists(self.metrics_csv_path)
+        self._append_metrics_row_to_path(self.metrics_csv_path, stats)
+        if self.run_metrics_csv_path != self.metrics_csv_path:
+            self._append_metrics_row_to_path(self.run_metrics_csv_path, stats)
 
-        with open(self.metrics_csv_path, "a", encoding="utf-8", newline="") as f:
+    def _append_metrics_row_to_path(self, path: str, stats: EpisodeStats):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        file_exists = os.path.exists(path)
+
+        with open(path, "a", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(["episode", "reward", "steps", "collisions", "epsilon"])

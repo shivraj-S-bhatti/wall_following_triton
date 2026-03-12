@@ -22,6 +22,7 @@ catkin_install_python(PROGRAMS
 
 install(PROGRAMS
   scripts/clean_roslaunch.sh
+  scripts/d2_state.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

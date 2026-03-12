@@ -85,6 +85,32 @@ roslaunch wall_following_triton wf_d2_sarsa_test.launch
   - `artifacts/qtable_d2_sarsa_best.yaml`
   - `artifacts/qtable_d2_sarsa_latest.yaml`
   - `artifacts/d2_sarsa_metrics.csv`
+- Every train run is also mirrored into a timestamped ignored run folder:
+  - `artifacts/runs/q_learning/<run_id>/...`
+  - `artifacts/runs/sarsa/<run_id>/...`
+- Q-table metadata now includes:
+  - `run_id`
+  - `run_started_at_utc`
+  - `last_saved_at_utc`
+  - `run_finished_at_utc`
+
+### State Management
+
+Use the helper script instead of manual copies:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh status
+./scripts/d2_state.sh save pre_pull_$(date +%Y%m%d_%H%M%S)
+./scripts/d2_state.sh load pre_pull_20260312_203000
+./scripts/d2_state.sh discard current
+```
+
+This script:
+- snapshots the live D2 state into `artifacts/checkpoints/<label>/`
+- restores a checkpoint back into live `artifacts/`
+- archives discarded live state into `artifacts/discarded/<timestamp>/`
+- migrates any legacy `config/qtable_d2_*_latest.yaml` checkpoint into `artifacts/` on load
 
 ### Testing Behavior
 
@@ -100,8 +126,8 @@ Do this after evaluating `artifacts/*best.yaml` or `artifacts/*latest.yaml` in G
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-cp artifacts/qtable_d2_qlearning_best.yaml config/qtable_d2_qlearning_best.yaml
-cp artifacts/qtable_d2_sarsa_best.yaml config/qtable_d2_sarsa_best.yaml
+./scripts/d2_state.sh promote q_learning best
+./scripts/d2_state.sh promote sarsa best
 ```
 
 ### Generate Reward-Curve Figure

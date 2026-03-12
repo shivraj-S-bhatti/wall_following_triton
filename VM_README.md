@@ -7,16 +7,7 @@ Quick commands for the Ubuntu VM.
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
 
-STAMP=$(date +%Y%m%d_%H%M%S)
-mkdir -p ~/wf_backups/$STAMP
-
-cp -v artifacts/qtable_d2_qlearning_latest.yaml ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/qtable_d2_qlearning_best.yaml   ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/d2_qlearning_metrics.csv        ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/qtable_d2_sarsa_latest.yaml     ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/qtable_d2_sarsa_best.yaml       ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/d2_sarsa_metrics.csv            ~/wf_backups/$STAMP/ 2>/dev/null || true
-cp -v artifacts/captured_start_poses.yaml       ~/wf_backups/$STAMP/ 2>/dev/null || true
+./scripts/d2_state.sh save pre_pull_$(date +%Y%m%d_%H%M%S)
 
 git fetch origin
 git checkout codex/d2
@@ -26,6 +17,27 @@ cd ~/catkin_ws
 source /opt/ros/noetic/setup.bash
 catkin_make
 source devel/setup.bash
+```
+
+Quick state inspection:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh status
+```
+
+Discard the current buggy live state safely:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh discard current
+```
+
+Restore a saved checkpoint:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh load pre_pull_20260312_203000
 ```
 
 ## One-Time Spawn Seed Capture
@@ -89,14 +101,14 @@ Fresh SARSA run:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=60 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 Resume SARSA:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=60 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 ## Quick Progress Checks
@@ -195,21 +207,22 @@ Promote Q-learning:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-cp artifacts/qtable_d2_qlearning_best.yaml config/qtable_d2_qlearning_best.yaml
+./scripts/d2_state.sh promote q_learning best
 ```
 
 Promote SARSA:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-cp artifacts/qtable_d2_sarsa_best.yaml config/qtable_d2_sarsa_best.yaml
+./scripts/d2_state.sh promote sarsa best
 ```
 
 ## Current Practical Defaults
 
 - `control_hz: 6.0`
 - `q_learning max_episodes: 320`
-- `sarsa max_episodes: 60`
+- `sarsa max_episodes: 320`
 - `max_steps_per_episode: 500`
 - live training outputs go to ignored `artifacts/`
-- tracked `config/*best.yaml` files are only for deliberate manual promotion
+- every run is mirrored to `artifacts/runs/<algorithm>/<run_id>/`
+- tracked `config/*best.yaml` files are only for deliberate promotion through `d2_state.sh`
