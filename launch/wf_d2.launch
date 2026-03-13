@@ -9,6 +9,7 @@
   <arg name="control_hz" default="6.0"/>
   <arg name="max_episodes" default="420"/>
   <arg name="max_steps_per_episode" default="240"/>
+  <arg name="eval_every_episodes" default="20"/>
   <arg name="resume_training_state" default="true"/>
   <arg name="acquire_wall_enabled" default="false"/>
   <arg name="actions_path" default="$(find wall_following_triton)/config/actions_d2.yaml"/>
@@ -44,6 +45,7 @@
     <param name="control_hz" value="$(arg control_hz)"/>
     <param name="max_episodes" value="$(arg max_episodes)"/>
     <param name="max_steps_per_episode" value="$(arg max_steps_per_episode)"/>
+    <param name="eval_every_episodes" value="$(arg eval_every_episodes)"/>
     <param name="resume_training_state" value="$(arg resume_training_state)"/>
     <param name="acquire_wall_enabled" value="$(arg acquire_wall_enabled)"/>
     <param name="actions_path" value="$(arg actions_path)"/>

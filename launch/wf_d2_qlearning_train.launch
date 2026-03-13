@@ -7,6 +7,7 @@
   <arg name="control_hz" default="6.0"/>
   <arg name="max_episodes" default="420"/>
   <arg name="max_steps_per_episode" default="240"/>
+  <arg name="eval_every_episodes" default="20"/>
   <arg name="resume_training_state" default="true"/>
   <arg name="acquire_wall_enabled" default="false"/>
 
@@ -21,6 +22,7 @@
     <arg name="control_hz" value="$(arg control_hz)"/>
     <arg name="max_episodes" value="$(arg max_episodes)"/>
     <arg name="max_steps_per_episode" value="$(arg max_steps_per_episode)"/>
+    <arg name="eval_every_episodes" value="$(arg eval_every_episodes)"/>
     <arg name="resume_training_state" value="$(arg resume_training_state)"/>
     <arg name="acquire_wall_enabled" value="$(arg acquire_wall_enabled)"/>
   </include>
