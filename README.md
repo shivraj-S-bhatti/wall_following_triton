@@ -198,12 +198,14 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh promote sarsa best
 ```
 
-### Generate Reward And Evaluation Figures
+### Generate Reward Figures
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
 python3 scripts/plot_d2_metrics.py --output artifacts/d2_converge_plots.png
 ```
+
+Add `--include-eval` if you also want the greedy-evaluation subplot.
 
 ## Quick Validation
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Plot D2 training metrics with rolling reward and evaluation score."""
+"""Plot D2 training metrics, using reward-only plots by default."""
 
 import argparse
 import csv
@@ -52,13 +52,13 @@ def _rolling_mean(values: List[float], window: int) -> List[float]:
 
 def _plot_algorithm(ax_reward, ax_eval, label: str, reward_csv: str, eval_csv: str, window: int):
     reward_eps, reward_values = _read_reward_csv(reward_csv)
-    eval_eps, eval_values = _read_eval_csv(eval_csv)
+    eval_eps, eval_values = _read_eval_csv(eval_csv) if ax_eval is not None else ([], [])
 
     if reward_eps:
         ax_reward.plot(reward_eps, reward_values, alpha=0.25, label=f"{label} raw")
         ax_reward.plot(reward_eps, _rolling_mean(reward_values, window), linewidth=2.0, label=f"{label} mean")
 
-    if eval_eps:
+    if ax_eval is not None and eval_eps:
         ax_eval.plot(eval_eps, eval_values, marker="o", linewidth=2.0, label=label)
 
 
@@ -70,9 +70,18 @@ def main():
     parser.add_argument("--s-eval", default="artifacts/d2_sarsa_eval.csv")
     parser.add_argument("--window", type=int, default=10)
     parser.add_argument("--output", default="artifacts/d2_converge_plots.png")
+    parser.add_argument(
+        "--include-eval",
+        action="store_true",
+        help="Include the greedy evaluation subplot. By default only reward curves are plotted.",
+    )
     args = parser.parse_args()
 
-    fig, (ax_reward, ax_eval) = plt.subplots(2, 1, figsize=(10, 8), sharex=False)
+    if args.include_eval:
+        fig, (ax_reward, ax_eval) = plt.subplots(2, 1, figsize=(10, 8), sharex=False)
+    else:
+        fig, ax_reward = plt.subplots(1, 1, figsize=(10, 5))
+        ax_eval = None
 
     _plot_algorithm(ax_reward, ax_eval, "Q-learning", args.q_reward, args.q_eval, args.window)
     _plot_algorithm(ax_reward, ax_eval, "SARSA", args.s_reward, args.s_eval, args.window)
@@ -83,11 +92,12 @@ def main():
     ax_reward.grid(True, alpha=0.3)
     ax_reward.legend()
 
-    ax_eval.set_title("D2 Greedy Evaluation Score")
-    ax_eval.set_xlabel("Completed Episodes")
-    ax_eval.set_ylabel("Evaluation Score")
-    ax_eval.grid(True, alpha=0.3)
-    ax_eval.legend()
+    if ax_eval is not None:
+        ax_eval.set_title("D2 Greedy Evaluation Score")
+        ax_eval.set_xlabel("Completed Episodes")
+        ax_eval.set_ylabel("Evaluation Score")
+        ax_eval.grid(True, alpha=0.3)
+        ax_eval.legend()
 
     fig.tight_layout()
     os.makedirs(os.path.dirname(args.output) or ".", exist_ok=True)
