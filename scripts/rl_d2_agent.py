@@ -115,6 +115,15 @@ class RLWallFollowerD2:
 
         # Reward for commanded forward motion to prefer making progress.
         self.reward_forward_scale = float(rospy.get_param("~reward_forward_scale", 0.50))
+        self.reward_front_blocked_correct_turn = float(
+            rospy.get_param("~reward_front_blocked_correct_turn", 1.20)
+        )
+        self.reward_front_blocked_wrong_turn = float(
+            rospy.get_param("~reward_front_blocked_wrong_turn", -1.20)
+        )
+        self.reward_front_blocked_straight = float(
+            rospy.get_param("~reward_front_blocked_straight", -1.60)
+        )
 
         # Terminal collision condition and penalty.
         self.collision_distance = float(rospy.get_param("~collision_distance", 0.30))
@@ -626,11 +635,34 @@ class RLWallFollowerD2:
         # 4) Small progress term from commanded translation.
         reward += self.reward_forward_scale * self._action_progress_speed(action_name)
 
+        # 5) Action-aware corner shaping.
+        # If the front is blocked and the right side is still occupied, we are in
+        # a dead-end/left-corner style situation for a right-wall follower and
+        # should commit left. If the right side has opened up, prefer turning
+        # right into the opening.
+        if state.front_bin == "too_close":
+            turn_direction = self._action_turn_direction(action_name)
+            preferred_turn = "right" if state.right_bin == "too_far" else "left"
+            if turn_direction == preferred_turn:
+                reward += self.reward_front_blocked_correct_turn
+            elif turn_direction == "straight":
+                reward += self.reward_front_blocked_straight
+            else:
+                reward += self.reward_front_blocked_wrong_turn
+
         return reward
 
     def _action_progress_speed(self, action_name: str) -> float:
         cfg = self.actions[action_name]
         return max(abs(float(cfg["linear_x"])), abs(float(cfg["linear_y"])))
+
+    def _action_turn_direction(self, action_name: str) -> str:
+        angular_z = float(self.actions[action_name]["angular_z"])
+        if angular_z > 1e-6:
+            return "left"
+        if angular_z < -1e-6:
+            return "right"
+        return "straight"
 
     def _termination_reason(self, state: EncodedState) -> Optional[str]:
         # Terminal if robot gets dangerously close ahead.
