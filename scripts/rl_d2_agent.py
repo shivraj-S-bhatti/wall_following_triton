@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Deliverable 2 reinforcement learning agent for Triton wall following.
-
-This script is intentionally comment-heavy for learning purposes.
-It supports both required algorithms:
-- Q-learning (off-policy TD control)
-- SARSA (on-policy TD control)
-
-And both required modes:
-- train: update Q-values online in Gazebo
-- test: load a learned Q-table and run greedy policy only
-"""
+"""Deliverable 2 RL agent with D2-specific state, evaluation, and test overrides."""
 
 import csv
 import math
@@ -29,18 +19,17 @@ from gazebo_msgs.srv import SetModelState
 from sensor_msgs.msg import LaserScan
 from std_srvs.srv import Empty
 
-# Keep local imports working both in source tree and installed catkin wrappers.
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 if THIS_DIR not in sys.path:
     sys.path.insert(0, THIS_DIR)
 
-from state_encoder import EncodedState, StateEncoder
+from state_encoder import D2EncodedState, D2StateEncoder
 
 
-# The state space is fixed by our Deliverable 1 discretization.
-FRONT_BINS = ["too_close", "safe"]
+FRONT_BINS = ["blocked", "clear"]
 RIGHT_BINS = ["too_close", "good", "too_far"]
 HEADING_BINS = ["toward_wall", "parallel", "away_from_wall"]
+OPEN_BINS = ["closed", "open"]
 
 
 @dataclass
@@ -52,22 +41,20 @@ class EpisodeStats:
     traps: int
 
 
+@dataclass
+class EvaluationStats:
+    completed_episodes: int
+    score: float
+    successes: int
+    collisions: int
+    traps: int
+    failures: int
+
+
 class RLWallFollowerD2:
-    """Main reinforcement learning node.
-
-    Core design choice for educational clarity:
-    - run one control/update step at fixed timer frequency
-    - keep the update logic explicit (not hidden in callbacks)
-    - store every learned transition through a small set of clearly named fields
-    """
-
     def __init__(self):
-        # -----------------------------
-        # 1) Read high-level run config
-        # -----------------------------
         self.algorithm = str(rospy.get_param("~algorithm", "q_learning")).strip().lower()
         self.mode = str(rospy.get_param("~mode", "train")).strip().lower()
-
         if self.algorithm not in {"q_learning", "sarsa"}:
             raise ValueError("~algorithm must be one of: q_learning, sarsa")
         if self.mode not in {"train", "test"}:
@@ -75,57 +62,40 @@ class RLWallFollowerD2:
 
         self.scan_topic = rospy.get_param("~scan_topic", "/scan")
         self.cmd_topic = rospy.get_param("~cmd_topic", "/cmd_vel")
-        self.acquire_wall_enabled = bool(rospy.get_param("~acquire_wall_enabled", False))
-        self.acquire_wall_distance = float(rospy.get_param("~acquire_wall_distance", 0.95))
-        self.acquire_front_turn_distance = float(rospy.get_param("~acquire_front_turn_distance", 0.90))
 
-        # -----------------------------
-        # 2) RL hyperparameters
-        # -----------------------------
-        self.alpha = float(rospy.get_param("~alpha", 0.20))
+        self.alpha = float(rospy.get_param("~alpha", 0.15))
         self.gamma = float(rospy.get_param("~gamma", 0.95))
         self.epsilon = float(rospy.get_param("~epsilon", 0.20))
-        self.epsilon_min = float(rospy.get_param("~epsilon_min", 0.05))
-        self.epsilon_decay = float(rospy.get_param("~epsilon_decay", 0.995))
+        self.epsilon_min = float(rospy.get_param("~epsilon_min", 0.03))
+        self.epsilon_decay = float(rospy.get_param("~epsilon_decay", 0.994))
 
-        # A control tick corresponds to one RL step.
         self.control_hz = float(rospy.get_param("~control_hz", 6.0))
-
-        # Episode controls (used in train mode).
-        self.max_episodes = int(rospy.get_param("~max_episodes", 320))
-        self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 500))
+        self.max_episodes = int(rospy.get_param("~max_episodes", 420))
+        self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 240))
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
         self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
+        self.resume_training_state = bool(rospy.get_param("~resume_training_state", True))
         self.reset_settle_seconds = float(rospy.get_param("~reset_settle_seconds", 0.20))
         self.reset_retry_attempts = max(1, int(rospy.get_param("~reset_retry_attempts", 3)))
 
-        # -----------------------------
-        # 3) Reward shaping config
-        # -----------------------------
-        # The reward is intentionally decomposed into terms so you can tune each piece.
-        self.reward_right_good = float(rospy.get_param("~reward_right_good", 1.00))
-        self.reward_right_too_close = float(rospy.get_param("~reward_right_too_close", -0.80))
-        self.reward_right_too_far = float(rospy.get_param("~reward_right_too_far", -0.60))
+        self.eval_every_episodes = max(0, int(rospy.get_param("~eval_every_episodes", 20)))
+        self.eval_max_steps_per_start = max(1, int(rospy.get_param("~eval_max_steps_per_start", 100)))
+        self.eval_failure_penalty = float(rospy.get_param("~eval_failure_penalty", -6.0))
 
-        self.reward_heading_parallel = float(rospy.get_param("~reward_heading_parallel", 0.60))
-        self.reward_heading_off = float(rospy.get_param("~reward_heading_off", -0.20))
-
-        self.reward_front_safe = float(rospy.get_param("~reward_front_safe", 0.20))
-        self.reward_front_too_close = float(rospy.get_param("~reward_front_too_close", -2.50))
-
-        # Reward for commanded forward motion to prefer making progress.
-        self.reward_forward_scale = float(rospy.get_param("~reward_forward_scale", 0.50))
-        self.reward_front_blocked_correct_turn = float(
-            rospy.get_param("~reward_front_blocked_correct_turn", 1.20)
+        self.reward_front_clear = float(rospy.get_param("~reward_front_clear", 0.30))
+        self.reward_front_blocked = float(rospy.get_param("~reward_front_blocked", -1.40))
+        self.reward_right_good = float(rospy.get_param("~reward_right_good", 1.20))
+        self.reward_right_too_close = float(rospy.get_param("~reward_right_too_close", -1.00))
+        self.reward_right_too_far = float(rospy.get_param("~reward_right_too_far", -0.80))
+        self.reward_heading_parallel = float(rospy.get_param("~reward_heading_parallel", 0.35))
+        self.reward_heading_off = float(rospy.get_param("~reward_heading_off", -0.10))
+        self.reward_progress_scale = float(rospy.get_param("~reward_progress_scale", 0.20))
+        self.reward_blocked_preferred_turn = float(
+            rospy.get_param("~reward_blocked_preferred_turn", 0.90)
         )
-        self.reward_front_blocked_wrong_turn = float(
-            rospy.get_param("~reward_front_blocked_wrong_turn", -1.20)
-        )
-        self.reward_front_blocked_straight = float(
-            rospy.get_param("~reward_front_blocked_straight", -1.60)
-        )
+        self.reward_blocked_wrong_turn = float(rospy.get_param("~reward_blocked_wrong_turn", -1.10))
+        self.reward_blocked_straight = float(rospy.get_param("~reward_blocked_straight", -1.40))
 
-        # Terminal collision condition and penalty.
         self.collision_distance = float(rospy.get_param("~collision_distance", 0.30))
         self.collision_penalty = float(rospy.get_param("~collision_penalty", -8.00))
         self.trapped_position_epsilon = float(rospy.get_param("~trapped_position_epsilon", 0.008))
@@ -135,60 +105,72 @@ class RLWallFollowerD2:
         self.tilt_termination_deg = float(rospy.get_param("~tilt_termination_deg", 55.0))
         self.z_termination_height = float(rospy.get_param("~z_termination_height", 0.25))
 
-        # -----------------------------
-        # 4) Files and reproducibility
-        # -----------------------------
+        self.acquire_wall_enabled = bool(rospy.get_param("~acquire_wall_enabled", False))
+        self.acquire_wall_distance = float(rospy.get_param("~acquire_wall_distance", 0.95))
+        self.acquire_front_turn_distance = float(rospy.get_param("~acquire_front_turn_distance", 0.85))
+
+        self.test_start_enabled = bool(rospy.get_param("~test_start_enabled", False))
+        self.test_start_pose = {
+            "x": float(rospy.get_param("~test_start_x", 0.0)),
+            "y": float(rospy.get_param("~test_start_y", 0.0)),
+            "z": float(rospy.get_param("~test_start_z", 0.0)),
+            "yaw": float(rospy.get_param("~test_start_yaw", 0.0)),
+        }
+
         self.actions_path = rospy.get_param("~actions_path")
         self.qtable_input_path = rospy.get_param("~qtable_input_path")
         self.qtable_output_path = rospy.get_param("~qtable_output_path")
         latest_qtable_output_path = str(rospy.get_param("~latest_qtable_output_path", "")).strip()
+        self.latest_qtable_output_path = latest_qtable_output_path or self._derive_latest_qtable_path(
+            self.qtable_output_path
+        )
         self.metrics_csv_path = rospy.get_param("~metrics_csv_path")
-        self.latest_qtable_output_path = latest_qtable_output_path or self._derive_latest_qtable_path(self.qtable_output_path)
-        self.resume_training_state = bool(rospy.get_param("~resume_training_state", True))
+        self.eval_csv_path = str(rospy.get_param("~eval_csv_path", "")).strip() or self._derive_eval_csv_path(
+            self.metrics_csv_path
+        )
 
-        # In test mode, we always act greedily. In train mode, we start with epsilon-greedy.
-        self.exploration_enabled = self.mode == "train"
-
-        # Determinism helper for reproducible experiments.
         self.random_seed = int(rospy.get_param("~random_seed", 603))
         random.seed(self.random_seed)
 
-        # -----------------------------
-        # 5) Start poses for episodes
-        # -----------------------------
-        # Each entry is a dict with x,y,z,yaw. We sample one per episode reset.
         self.start_poses = rospy.get_param("~start_poses", [])
+        self.eval_start_poses = rospy.get_param("~eval_start_poses", [])
         if not isinstance(self.start_poses, list):
-            raise ValueError("~start_poses must be a list of pose dictionaries")
-
+            raise ValueError("~start_poses must be a list")
+        if not isinstance(self.eval_start_poses, list):
+            raise ValueError("~eval_start_poses must be a list")
         self.robot_model_name = rospy.get_param("~robot_model_name", "triton")
 
-        # -----------------------------
-        # 6) Perception and action maps
-        # -----------------------------
-        self.encoder = StateEncoder(
-            front_too_close=float(rospy.get_param("~front_too_close", 0.55)),
+        self.encoder = D2StateEncoder(
+            front_blocked_threshold=float(rospy.get_param("~front_blocked_threshold", 0.55)),
             right_too_close=float(rospy.get_param("~right_too_close", 0.55)),
             right_too_far=float(rospy.get_param("~right_too_far", 0.95)),
             heading_parallel_tolerance=float(rospy.get_param("~heading_parallel_tolerance", 0.10)),
+            opening_distance_threshold=float(rospy.get_param("~opening_distance_threshold", 1.20)),
             front_sector_start_deg=float(rospy.get_param("~front_sector_start_deg", 75.0)),
             front_sector_end_deg=float(rospy.get_param("~front_sector_end_deg", 105.0)),
-            right_front_sector_start_deg=float(rospy.get_param("~right_front_sector_start_deg", 20.0)),
-            right_front_sector_end_deg=float(rospy.get_param("~right_front_sector_end_deg", 70.0)),
+            right_front_sector_start_deg=float(rospy.get_param("~right_front_sector_start_deg", 15.0)),
+            right_front_sector_end_deg=float(rospy.get_param("~right_front_sector_end_deg", 65.0)),
             right_rear_sector_start_deg=float(rospy.get_param("~right_rear_sector_start_deg", -70.0)),
             right_rear_sector_end_deg=float(rospy.get_param("~right_rear_sector_end_deg", -20.0)),
+            front_left_open_sector_start_deg=float(
+                rospy.get_param("~front_left_open_sector_start_deg", 100.0)
+            ),
+            front_left_open_sector_end_deg=float(
+                rospy.get_param("~front_left_open_sector_end_deg", 155.0)
+            ),
+            front_right_open_sector_start_deg=float(
+                rospy.get_param("~front_right_open_sector_start_deg", 25.0)
+            ),
+            front_right_open_sector_end_deg=float(
+                rospy.get_param("~front_right_open_sector_end_deg", 85.0)
+            ),
         )
 
         self.actions = self._load_actions(self.actions_path)
-
-        # Initialize Q-table from file and fill any missing state-action entries.
         self.loaded_qtable_metadata: Dict[str, object] = {}
         self.q_table = self._load_q_table(self.qtable_input_path)
         self._ensure_dense_q_table()
 
-        # Every training run gets a stable run_id so checkpoints can live in a
-        # timestamped folder that git will never touch. If we resume from a
-        # modern checkpoint, keep using its run_id.
         self.run_id = self._resolve_run_id()
         self.run_started_at_utc = self._resolve_run_started_at()
         self.training_finished_at_utc: Optional[str] = None
@@ -203,60 +185,44 @@ class RLWallFollowerD2:
         self.run_metrics_csv_path = os.path.join(
             self.run_artifact_dir, os.path.basename(self.metrics_csv_path)
         )
+        self.run_eval_csv_path = os.path.join(
+            self.run_artifact_dir, os.path.basename(self.eval_csv_path)
+        )
         self._prime_run_artifacts()
 
-        # -----------------------------
-        # 7) Runtime state variables
-        # -----------------------------
         self.latest_scan: Optional[LaserScan] = None
+        self.latest_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
+        self.prev_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
+        self.stationary_steps = 0
 
-        # Transition memory for TD updates.
         self.prev_state_key: Optional[str] = None
         self.prev_action: Optional[str] = None
 
-        # Episode counters.
         self.episode_idx = 0
         self.episode_step = 0
         self.episode_reward = 0.0
         self.episode_collisions = 0
         self.episode_traps = 0
-
-        # Trap detection state.
-        self.latest_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
-        self.prev_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
-        self.stationary_steps = 0
-
-        # Keep best reward and persist best policy.
-        self.best_episode_reward = float("-inf")
-
-        # For diagnostics and plotting.
+        self.best_eval_score = float("-inf")
         self.episode_history: List[EpisodeStats] = []
+        self.evaluation_history: List[EvaluationStats] = []
         self._restore_training_state_if_requested()
 
-        # -----------------------------
-        # 8) ROS publishers/subscribers/services
-        # -----------------------------
         self.cmd_pub = rospy.Publisher(self.cmd_topic, Twist, queue_size=10)
         self.scan_sub = rospy.Subscriber(self.scan_topic, LaserScan, self._scan_callback, queue_size=1)
-        self.model_states_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self._model_states_callback, queue_size=1)
+        self.model_states_sub = rospy.Subscriber(
+            "/gazebo/model_states", ModelStates, self._model_states_callback, queue_size=1
+        )
 
         self.set_model_state_srv = None
         self.pause_physics_srv = None
         self.unpause_physics_srv = None
         self.reset_world_srv = None
-        if self.mode == "train":
-            # We use Gazebo reset-by-pose to start new episodes from varied initial states.
-            rospy.wait_for_service("/gazebo/set_model_state", timeout=20.0)
-            rospy.wait_for_service("/gazebo/pause_physics", timeout=20.0)
-            rospy.wait_for_service("/gazebo/unpause_physics", timeout=20.0)
-            rospy.wait_for_service("/gazebo/reset_world", timeout=20.0)
-            self.set_model_state_srv = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
-            self.pause_physics_srv = rospy.ServiceProxy("/gazebo/pause_physics", Empty)
-            self.unpause_physics_srv = rospy.ServiceProxy("/gazebo/unpause_physics", Empty)
-            self.reset_world_srv = rospy.ServiceProxy("/gazebo/reset_world", Empty)
+        self._configure_gazebo_services()
 
-        # Fixed control loop timer drives both acting and learning updates.
-        self.control_timer = rospy.Timer(rospy.Duration(1.0 / max(self.control_hz, 1.0)), self._on_control_tick)
+        self.control_timer = rospy.Timer(
+            rospy.Duration(1.0 / max(self.control_hz, 1.0)), self._on_control_tick
+        )
 
         rospy.loginfo("RLWallFollowerD2 started")
         rospy.loginfo("algorithm=%s mode=%s", self.algorithm, self.mode)
@@ -264,19 +230,44 @@ class RLWallFollowerD2:
         rospy.loginfo("qtable_input=%s", self.qtable_input_path)
         rospy.loginfo("qtable_output=%s", self.qtable_output_path)
         rospy.loginfo(
-            "latest_qtable_output=%s checkpoint_every_episodes=%d",
+            "latest_qtable_output=%s eval_csv=%s",
             self.latest_qtable_output_path,
-            self.checkpoint_every_episodes,
+            self.eval_csv_path,
         )
         rospy.loginfo("run_id=%s run_artifact_dir=%s", self.run_id, self.run_artifact_dir)
 
-        # Begin from a known start pose in train mode.
         if self.mode == "train":
             self._reset_for_next_episode(reason="initial_start")
+        elif self.test_start_enabled:
+            self._apply_test_start_pose()
 
-    # ---------------------------------------------------------------------
-    # Data loading and Q-table setup helpers
-    # ---------------------------------------------------------------------
+    def _configure_gazebo_services(self):
+        needs_services = self.mode == "train" or self.test_start_enabled
+        if not needs_services:
+            return
+
+        rospy.wait_for_service("/gazebo/set_model_state", timeout=20.0)
+        rospy.wait_for_service("/gazebo/pause_physics", timeout=20.0)
+        rospy.wait_for_service("/gazebo/unpause_physics", timeout=20.0)
+        rospy.wait_for_service("/gazebo/reset_world", timeout=20.0)
+
+        self.set_model_state_srv = rospy.ServiceProxy("/gazebo/set_model_state", SetModelState)
+        self.pause_physics_srv = rospy.ServiceProxy("/gazebo/pause_physics", Empty)
+        self.unpause_physics_srv = rospy.ServiceProxy("/gazebo/unpause_physics", Empty)
+        self.reset_world_srv = rospy.ServiceProxy("/gazebo/reset_world", Empty)
+
+    def _apply_test_start_pose(self):
+        try:
+            self._reset_robot_pose_safely(self.test_start_pose)
+            rospy.loginfo(
+                "Applied manual test start pose x=%.3f y=%.3f yaw=%.3f",
+                self.test_start_pose["x"],
+                self.test_start_pose["y"],
+                self.test_start_pose["yaw"],
+            )
+        except Exception as exc:  # pragma: no cover - ROS runtime only
+            rospy.logwarn("Failed to apply manual test start pose: %s", exc)
+
     def _load_actions(self, path: str) -> Dict[str, Dict[str, float]]:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
@@ -311,23 +302,36 @@ class RLWallFollowerD2:
             if not isinstance(values, dict):
                 continue
             q_table[str(state_key)] = {str(a): float(v) for a, v in values.items()}
+
+        if not q_table:
+            return {}
+
+        sample_key = next(iter(q_table.keys()))
+        if len(sample_key.split("|")) == 3:
+            rospy.loginfo("Expanding legacy 18-state Q-table into D2 72-state space")
+            return self._expand_legacy_q_table(q_table)
         return q_table
 
+    def _expand_legacy_q_table(
+        self, legacy_q_table: Dict[str, Dict[str, float]]
+    ) -> Dict[str, Dict[str, float]]:
+        expanded: Dict[str, Dict[str, float]] = {}
+        for state_key, action_values in legacy_q_table.items():
+            parts = state_key.split("|")
+            if len(parts) != 3:
+                continue
+            for front_left_open in OPEN_BINS:
+                for front_right_open in OPEN_BINS:
+                    expanded_key = (
+                        f"{parts[0]}|{parts[1]}|{parts[2]}|"
+                        f"{front_left_open}|{front_right_open}"
+                    )
+                    expanded[expanded_key] = dict(action_values)
+        return expanded
+
     def _ensure_dense_q_table(self):
-        """Guarantee Q(s,a) exists for every discrete state and action.
-
-        This prevents key errors and makes algorithm behavior easy to reason about.
-        Missing entries are initialized to zero.
-        """
-        all_state_keys = []
-        for f in FRONT_BINS:
-            for r in RIGHT_BINS:
-                for h in HEADING_BINS:
-                    all_state_keys.append(f"{f}|{r}|{h}")
-
-        for state_key in all_state_keys:
-            if state_key not in self.q_table:
-                self.q_table[state_key] = {}
+        for state_key in self._all_state_keys():
+            self.q_table.setdefault(state_key, {})
             for action_name in self.actions.keys():
                 self.q_table[state_key].setdefault(action_name, 0.0)
 
@@ -337,6 +341,13 @@ class RLWallFollowerD2:
         if ext:
             return f"{root}_latest{ext}"
         return f"{best_path}_latest"
+
+    @staticmethod
+    def _derive_eval_csv_path(metrics_csv_path: str) -> str:
+        if metrics_csv_path.endswith("_metrics.csv"):
+            return metrics_csv_path.replace("_metrics.csv", "_eval.csv")
+        root, ext = os.path.splitext(metrics_csv_path)
+        return f"{root}_eval{ext or '.csv'}"
 
     @staticmethod
     def _utc_now() -> datetime:
@@ -365,27 +376,15 @@ class RLWallFollowerD2:
     def _prime_run_artifacts(self):
         os.makedirs(self.run_artifact_dir, exist_ok=True)
 
-        if (
-            self.mode == "train"
-            and os.path.exists(self.metrics_csv_path)
-            and not os.path.exists(self.run_metrics_csv_path)
-        ):
-            shutil.copyfile(self.metrics_csv_path, self.run_metrics_csv_path)
+        self._copy_if_missing(self.metrics_csv_path, self.run_metrics_csv_path)
+        self._copy_if_missing(self.eval_csv_path, self.run_eval_csv_path)
+        self._copy_if_missing(self.qtable_output_path, self.run_qtable_output_path)
+        self._copy_if_missing(self.latest_qtable_output_path, self.run_latest_qtable_output_path)
 
-        if (
-            self.mode == "train"
-            and "_latest" in os.path.basename(self.qtable_input_path)
-            and os.path.exists(self.qtable_input_path)
-            and not os.path.exists(self.run_latest_qtable_output_path)
-        ):
-            shutil.copyfile(self.qtable_input_path, self.run_latest_qtable_output_path)
-
-        if (
-            self.mode == "train"
-            and os.path.exists(self.qtable_output_path)
-            and not os.path.exists(self.run_qtable_output_path)
-        ):
-            shutil.copyfile(self.qtable_output_path, self.run_qtable_output_path)
+    @staticmethod
+    def _copy_if_missing(src: str, dest: str):
+        if os.path.exists(src) and not os.path.exists(dest):
+            shutil.copyfile(src, dest)
 
     def _restore_training_state_if_requested(self):
         if self.mode != "train" or not self.resume_training_state:
@@ -394,8 +393,6 @@ class RLWallFollowerD2:
             return
 
         resumed_episode_idx = 0
-        best_reward = float("-inf")
-
         if os.path.exists(self.metrics_csv_path):
             try:
                 with open(self.metrics_csv_path, "r", encoding="utf-8", newline="") as f:
@@ -403,18 +400,10 @@ class RLWallFollowerD2:
                     for row in reader:
                         try:
                             resumed_episode_idx = max(resumed_episode_idx, int(row["episode"]) + 1)
-                            best_reward = max(best_reward, float(row["reward"]))
                         except (KeyError, TypeError, ValueError):
                             continue
             except OSError as exc:
                 rospy.logwarn("Failed to inspect metrics CSV for resume state: %s", exc)
-
-        metadata_epsilon = self.loaded_qtable_metadata.get("epsilon")
-        try:
-            if metadata_epsilon is not None:
-                self.epsilon = max(self.epsilon_min, float(metadata_epsilon))
-        except (TypeError, ValueError):
-            pass
 
         metadata_completed = self.loaded_qtable_metadata.get("completed_episodes")
         try:
@@ -423,20 +412,40 @@ class RLWallFollowerD2:
         except (TypeError, ValueError):
             pass
 
-        if best_reward > float("-inf"):
-            self.best_episode_reward = best_reward
-        self.episode_idx = resumed_episode_idx
+        metadata_epsilon = self.loaded_qtable_metadata.get("epsilon")
+        try:
+            if metadata_epsilon is not None:
+                self.epsilon = max(self.epsilon_min, float(metadata_epsilon))
+        except (TypeError, ValueError):
+            pass
 
+        if os.path.exists(self.eval_csv_path):
+            try:
+                with open(self.eval_csv_path, "r", encoding="utf-8", newline="") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            self.best_eval_score = max(self.best_eval_score, float(row["score"]))
+                        except (KeyError, TypeError, ValueError):
+                            continue
+            except OSError as exc:
+                rospy.logwarn("Failed to inspect eval CSV for resume state: %s", exc)
+
+        metadata_best_eval = self.loaded_qtable_metadata.get("best_eval_score")
+        try:
+            if metadata_best_eval is not None:
+                self.best_eval_score = max(self.best_eval_score, float(metadata_best_eval))
+        except (TypeError, ValueError):
+            pass
+
+        self.episode_idx = resumed_episode_idx
         rospy.loginfo(
-            "Resuming training state: episode_idx=%d epsilon=%.3f best_reward=%.3f",
+            "Resuming training state: episode_idx=%d epsilon=%.3f best_eval=%.3f",
             self.episode_idx,
             self.epsilon,
-            self.best_episode_reward,
+            self.best_eval_score,
         )
 
-    # ---------------------------------------------------------------------
-    # ROS callbacks
-    # ---------------------------------------------------------------------
     def _scan_callback(self, msg: LaserScan):
         self.latest_scan = msg
 
@@ -471,36 +480,27 @@ class RLWallFollowerD2:
         self.latest_robot_pose = (float(position.x), float(position.y), float(position.z), roll, pitch, yaw)
 
     def _on_control_tick(self, _event):
-        """Single periodic step for either testing or training.
-
-        The control loop only advances when we have a recent scan.
-        """
         if self.latest_scan is None:
             return
 
-        encoded = self.encoder.encode(self.latest_scan)
-        state_key = encoded.key
+        state = self.encoder.encode(self.latest_scan)
 
         if self.mode == "test":
-            action = self._select_test_action(encoded)
+            action = self._select_test_action(state)
             self._publish_action(action)
             rospy.loginfo_throttle(
                 1.0,
                 "[test] state=%s action=%s front=%.2f right=%.2f",
-                state_key,
+                state.key,
                 action,
-                encoded.front_min,
-                encoded.right_min,
+                state.front_min,
+                state.right_min,
             )
             return
 
-        # Train mode path.
-        self._training_step(encoded)
+        self._training_step(state)
 
-    # ---------------------------------------------------------------------
-    # Training loop
-    # ---------------------------------------------------------------------
-    def _training_step(self, current_state: EncodedState):
+    def _training_step(self, current_state: D2EncodedState):
         if self.episode_idx >= self.max_episodes:
             if self.training_done_stop:
                 self._publish_stop()
@@ -508,17 +508,14 @@ class RLWallFollowerD2:
 
         current_key = current_state.key
 
-        # First step in an episode: choose and execute an initial action.
         if self.prev_state_key is None or self.prev_action is None:
-            next_action = self._select_behavior_action(current_key)
-            self._publish_action(next_action)
-
+            initial_action = self._select_behavior_action(current_key)
+            self._publish_action(initial_action)
             self.prev_state_key = current_key
-            self.prev_action = next_action
+            self.prev_action = initial_action
             self.episode_step = 1
             return
 
-        # Build reward from *resulting* state after previous action.
         reward = self._compute_reward(current_state, self.prev_action)
         termination_reason = self._termination_reason(current_state)
         done = termination_reason is not None
@@ -532,35 +529,25 @@ class RLWallFollowerD2:
 
         self.episode_reward += reward
 
-        # Train mode is pure RL. Search/acquisition heuristics do not feed TD updates.
-        next_behavior_action = self._select_behavior_action(current_key)
-
-        # TD target depends on algorithm choice.
+        next_action = self._select_behavior_action(current_key)
         old_q = self.q_table[self.prev_state_key][self.prev_action]
-
         if done:
             bootstrap = 0.0
         elif self.algorithm == "sarsa":
-            # SARSA: bootstrap with Q(s', a') where a' is policy's next action.
-            bootstrap = self.q_table[current_key][next_behavior_action]
+            bootstrap = self.q_table[current_key][next_action]
         else:
-            # Q-learning: bootstrap with max_a' Q(s', a').
             bootstrap = max(self.q_table[current_key].values())
 
         target = reward + self.gamma * bootstrap
-        new_q = old_q + self.alpha * (target - old_q)
-        self.q_table[self.prev_state_key][self.prev_action] = new_q
+        self.q_table[self.prev_state_key][self.prev_action] = old_q + self.alpha * (target - old_q)
 
-        # Episode stop criteria.
         if done or self.episode_step >= self.max_steps_per_episode:
-            reason = termination_reason or "max_steps"
-            self._finish_episode(reason=reason)
+            self._finish_episode(reason=termination_reason or "max_steps")
             return
 
-        # Advance to next step.
-        self._publish_action(next_behavior_action)
+        self._publish_action(next_action)
         self.prev_state_key = current_key
-        self.prev_action = next_behavior_action
+        self.prev_action = next_action
         self.episode_step += 1
 
         rospy.loginfo_throttle(
@@ -569,56 +556,46 @@ class RLWallFollowerD2:
             self.episode_idx,
             self.episode_step,
             current_key,
-            next_behavior_action,
+            next_action,
             reward,
             self.epsilon,
         )
 
-    # ---------------------------------------------------------------------
-    # RL policy helpers
-    # ---------------------------------------------------------------------
-    def _select_greedy_action(self, state_key: str) -> str:
-        state_scores = self.q_table[state_key]
-        # Tie-break on action name for deterministic behavior when values equal.
-        return max(state_scores.items(), key=lambda kv: (kv[1], kv[0]))[0]
-
     def _select_behavior_action(self, state_key: str) -> str:
-        if self.exploration_enabled and random.random() < self.epsilon:
+        if self.mode == "train" and random.random() < self.epsilon:
             return random.choice(list(self.actions.keys()))
         return self._select_greedy_action(state_key)
 
-    def _select_test_action(self, state: EncodedState) -> str:
+    def _select_greedy_action(self, state_key: str) -> str:
+        state_scores = self.q_table[state_key]
+        return max(state_scores.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+    def _select_test_action(self, state: D2EncodedState) -> str:
         acquisition_action = self._select_test_acquisition_action(state)
         if acquisition_action is not None:
             return acquisition_action
         return self._select_greedy_action(state.key)
 
-    def _select_test_acquisition_action(self, state: EncodedState) -> Optional[str]:
+    def _select_test_acquisition_action(self, state: D2EncodedState) -> Optional[str]:
         if not self.acquire_wall_enabled:
             return None
-        if state.right_min <= self.acquire_wall_distance:
+        if state.right_bin != "too_far":
             return None
-        if state.front_min > self.acquire_front_turn_distance and "straight" in self.actions:
+        if state.front_bin == "clear" and "straight" in self.actions:
             return "straight"
+        if state.front_right_open_bin == "open" and "turn_right_hard" in self.actions:
+            return "turn_right_hard"
+        if state.front_left_open_bin == "open" and "turn_left_hard" in self.actions:
+            return "turn_left_hard"
         if "turn_right_hard" in self.actions:
             return "turn_right_hard"
-        if "turn_right_soft" in self.actions:
-            return "turn_right_soft"
         return "straight" if "straight" in self.actions else None
 
-    # ---------------------------------------------------------------------
-    # Reward and termination
-    # ---------------------------------------------------------------------
-    def _compute_reward(self, state: EncodedState, action_name: str) -> float:
+    def _compute_reward(self, state: D2EncodedState, action_name: str) -> float:
         reward = 0.0
 
-        # 1) Front clearance term.
-        if state.front_bin == "too_close":
-            reward += self.reward_front_too_close
-        else:
-            reward += self.reward_front_safe
+        reward += self.reward_front_blocked if state.front_bin == "blocked" else self.reward_front_clear
 
-        # 2) Wall-distance term.
         if state.right_bin == "good":
             reward += self.reward_right_good
         elif state.right_bin == "too_close":
@@ -626,35 +603,35 @@ class RLWallFollowerD2:
         else:
             reward += self.reward_right_too_far
 
-        # 3) Heading-alignment term.
         if state.heading_bin == "parallel":
             reward += self.reward_heading_parallel
         else:
             reward += self.reward_heading_off
 
-        # 4) Small progress term from commanded translation.
-        reward += self.reward_forward_scale * self._action_progress_speed(action_name)
+        reward += self.reward_progress_scale * self._action_progress_speed(action_name)
 
-        # 5) Action-aware corner shaping.
-        # If the front is blocked and the right side is still occupied, we are in
-        # a dead-end/left-corner style situation for a right-wall follower and
-        # should commit left. If the right side has opened up, prefer turning
-        # right into the opening.
-        if state.front_bin == "too_close":
+        if state.front_bin == "blocked":
+            preferred_turn = self._preferred_blocked_turn(state)
             turn_direction = self._action_turn_direction(action_name)
-            preferred_turn = "right" if state.right_bin == "too_far" else "left"
             if turn_direction == preferred_turn:
-                reward += self.reward_front_blocked_correct_turn
+                reward += self.reward_blocked_preferred_turn
             elif turn_direction == "straight":
-                reward += self.reward_front_blocked_straight
+                reward += self.reward_blocked_straight
             else:
-                reward += self.reward_front_blocked_wrong_turn
+                reward += self.reward_blocked_wrong_turn
 
         return reward
 
+    def _preferred_blocked_turn(self, state: D2EncodedState) -> str:
+        if state.front_right_open_bin == "open":
+            return "right"
+        if state.front_left_open_bin == "open":
+            return "left"
+        return "left" if state.right_bin != "too_far" else "right"
+
     def _action_progress_speed(self, action_name: str) -> float:
         cfg = self.actions[action_name]
-        return max(abs(float(cfg["linear_x"])), abs(float(cfg["linear_y"])))
+        return math.hypot(float(cfg["linear_x"]), float(cfg["linear_y"]))
 
     def _action_turn_direction(self, action_name: str) -> str:
         angular_z = float(self.actions[action_name]["angular_z"])
@@ -664,8 +641,7 @@ class RLWallFollowerD2:
             return "right"
         return "straight"
 
-    def _termination_reason(self, state: EncodedState) -> Optional[str]:
-        # Terminal if robot gets dangerously close ahead.
+    def _termination_reason(self, state: D2EncodedState) -> Optional[str]:
         if state.front_min < self.collision_distance:
             return "collision"
         if self._is_flipped():
@@ -685,10 +661,12 @@ class RLWallFollowerD2:
         dx = self.latest_robot_pose[0] - self.prev_robot_pose[0]
         dy = self.latest_robot_pose[1] - self.prev_robot_pose[1]
         distance = math.hypot(dx, dy)
-        yaw_delta = abs(math.atan2(
-            math.sin(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
-            math.cos(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
-        ))
+        yaw_delta = abs(
+            math.atan2(
+                math.sin(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
+                math.cos(self.latest_robot_pose[5] - self.prev_robot_pose[5]),
+            )
+        )
         self.prev_robot_pose = self.latest_robot_pose
 
         if distance <= self.trapped_position_epsilon and yaw_delta <= self.trapped_yaw_epsilon:
@@ -713,9 +691,6 @@ class RLWallFollowerD2:
             return True
         return False
 
-    # ---------------------------------------------------------------------
-    # Episode transitions and persistence
-    # ---------------------------------------------------------------------
     def _finish_episode(self, reason: str):
         stats = EpisodeStats(
             episode_idx=self.episode_idx,
@@ -736,30 +711,34 @@ class RLWallFollowerD2:
             stats.traps,
         )
 
-        # Track best policy by reward and persist immediately.
-        if stats.total_reward > self.best_episode_reward:
-            self.best_episode_reward = stats.total_reward
-            self._save_q_table(self.qtable_output_path)
-            if self.run_qtable_output_path != self.qtable_output_path:
-                self._save_q_table(self.run_qtable_output_path)
-            rospy.loginfo("New best policy saved (reward=%.3f)", self.best_episode_reward)
-
-        # Append one row to metrics CSV after every episode.
+        completed_episodes = self.episode_idx + 1
         self._append_metrics_row(stats)
 
-        # Exponential epsilon decay after each episode.
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
+        self._save_latest_checkpoint(completed_episodes)
 
-        self.episode_idx += 1
-        self._save_latest_checkpoint(self.episode_idx)
+        ran_eval = False
+        if self.eval_every_episodes > 0 and completed_episodes % self.eval_every_episodes == 0:
+            self._run_evaluation(completed_episodes)
+            ran_eval = True
+
+        self.episode_idx = completed_episodes
 
         if self.episode_idx >= self.max_episodes:
-            # Preserve the separately tracked best policy and only refresh the
-            # resumable/latest checkpoint at training end.
+            if not ran_eval:
+                self._run_evaluation(completed_episodes)
             self.training_finished_at_utc = self._utc_iso()
-            self._save_q_table(self.latest_qtable_output_path)
+            self._save_q_table(
+                self.latest_qtable_output_path,
+                checkpoint_kind="latest",
+                completed_episodes=self.episode_idx,
+            )
             if self.run_latest_qtable_output_path != self.latest_qtable_output_path:
-                self._save_q_table(self.run_latest_qtable_output_path)
+                self._save_q_table(
+                    self.run_latest_qtable_output_path,
+                    checkpoint_kind="latest",
+                    completed_episodes=self.episode_idx,
+                )
             rospy.loginfo("Training finished at episode %d", self.episode_idx)
             if self.training_done_stop:
                 self._publish_stop()
@@ -767,39 +746,160 @@ class RLWallFollowerD2:
 
         self._reset_for_next_episode(reason=reason)
 
+    def _run_evaluation(self, completed_episodes: int):
+        if self.mode != "train" or not self.eval_start_poses:
+            return
+
+        rospy.loginfo("Running greedy evaluation at episode %d", completed_episodes)
+        self._publish_stop()
+
+        total_score = 0.0
+        successes = 0
+        collisions = 0
+        traps = 0
+        failures = 0
+
+        for pose_cfg in self.eval_start_poses:
+            score, success, collision_count, trap_count = self._evaluate_single_start(pose_cfg)
+            total_score += score
+            successes += int(success)
+            collisions += collision_count
+            traps += trap_count
+            failures += int(not success)
+
+        stats = EvaluationStats(
+            completed_episodes=completed_episodes,
+            score=total_score,
+            successes=successes,
+            collisions=collisions,
+            traps=traps,
+            failures=failures,
+        )
+        self.evaluation_history.append(stats)
+        self._append_eval_row(stats)
+
+        rospy.loginfo(
+            "Evaluation after episode %d: score=%.3f successes=%d/%d collisions=%d traps=%d",
+            completed_episodes,
+            total_score,
+            successes,
+            len(self.eval_start_poses),
+            collisions,
+            traps,
+        )
+
+        if total_score > self.best_eval_score:
+            self.best_eval_score = total_score
+            self._save_q_table(
+                self.qtable_output_path,
+                checkpoint_kind="best",
+                completed_episodes=completed_episodes,
+            )
+            if self.run_qtable_output_path != self.qtable_output_path:
+                self._save_q_table(
+                    self.run_qtable_output_path,
+                    checkpoint_kind="best",
+                    completed_episodes=completed_episodes,
+                )
+            rospy.loginfo("New best policy saved from evaluation (score=%.3f)", self.best_eval_score)
+
+    def _evaluate_single_start(self, pose_cfg: dict) -> Tuple[float, bool, int, int]:
+        self.prev_robot_pose = None
+        self.stationary_steps = 0
+        self._reset_robot_pose_safely(pose_cfg)
+        self._publish_stop()
+
+        score = 0.0
+        prev_action: Optional[str] = None
+        collisions = 0
+        traps = 0
+        success = True
+
+        for _ in range(self.eval_max_steps_per_start):
+            state = self._wait_for_encoded_state(timeout=1.5)
+            if state is None:
+                score += self.eval_failure_penalty
+                success = False
+                break
+
+            current_key = state.key
+            if prev_action is None:
+                action = self._select_greedy_action(current_key)
+                self._publish_action(action)
+                prev_action = action
+                rospy.sleep(1.0 / max(self.control_hz, 1.0))
+                continue
+
+            reward = self._compute_reward(state, prev_action)
+            termination_reason = self._termination_reason(state)
+            if termination_reason in {"collision", "flipped"}:
+                reward += self.collision_penalty
+                collisions += 1
+            elif termination_reason == "trapped":
+                reward += self.trapped_penalty
+                traps += 1
+
+            score += reward
+
+            if termination_reason is not None:
+                score += self.eval_failure_penalty
+                success = False
+                break
+
+            action = self._select_greedy_action(current_key)
+            self._publish_action(action)
+            prev_action = action
+            rospy.sleep(1.0 / max(self.control_hz, 1.0))
+
+        self._publish_stop()
+        return score, success, collisions, traps
+
+    def _wait_for_encoded_state(self, timeout: float) -> Optional[D2EncodedState]:
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        while not rospy.is_shutdown():
+            if self.latest_scan is not None:
+                return self.encoder.encode(self.latest_scan)
+            if rospy.Time.now() >= deadline:
+                break
+            rospy.sleep(0.02)
+        return None
+
     def _reset_for_next_episode(self, reason: str):
-        """Reset runtime step state and optionally reset robot pose in Gazebo."""
         self.prev_state_key = None
         self.prev_action = None
         self.episode_step = 0
         self.episode_reward = 0.0
         self.episode_collisions = 0
         self.episode_traps = 0
+        self.latest_scan = None
         self.prev_robot_pose = None
         self.stationary_steps = 0
-
         self._publish_stop()
 
-        if self.set_model_state_srv is not None and self.start_poses:
-            try:
-                pose_pool = list(self.start_poses)
-                random.shuffle(pose_pool)
-                pose_pool = pose_pool[: self.reset_retry_attempts]
+        if self.mode != "train" or self.set_model_state_srv is None or not self.start_poses:
+            return
 
-                reset_ok = False
-                for pose_cfg in pose_pool:
-                    self._reset_robot_pose_safely(pose_cfg)
-                    if not self._is_flipped():
-                        reset_ok = True
-                        break
-                    rospy.logwarn("Reset pose rejected due to 3D instability: %s", pose_cfg)
+        try:
+            pose_pool = list(self.start_poses)
+            random.shuffle(pose_pool)
+            pose_pool = pose_pool[: self.reset_retry_attempts]
+            reset_ok = False
+            for pose_cfg in pose_pool:
+                self._reset_robot_pose_safely(pose_cfg)
+                if not self._is_flipped():
+                    reset_ok = True
+                    break
+                rospy.logwarn("Reset pose rejected due to 3D instability: %s", pose_cfg)
 
-                if not reset_ok:
-                    rospy.logwarn("All reset attempts failed after '%s'; keeping last pose.", reason)
-            except Exception as exc:
-                rospy.logwarn("Episode reset pose failed after '%s': %s", reason, exc)
+            if not reset_ok:
+                rospy.logwarn("All reset attempts failed after '%s'; keeping last pose.", reason)
+        except Exception as exc:  # pragma: no cover - ROS runtime only
+            rospy.logwarn("Episode reset pose failed after '%s': %s", reason, exc)
 
     def _reset_robot_pose_safely(self, pose_cfg: dict):
+        self.latest_scan = None
+        self.prev_robot_pose = None
+        self.stationary_steps = 0
         for _ in range(3):
             self._publish_stop()
 
@@ -820,14 +920,9 @@ class RLWallFollowerD2:
         self._publish_stop()
 
     def _set_robot_pose(self, pose_cfg: dict):
-        """Set robot pose using /gazebo/set_model_state.
-
-        pose_cfg example:
-          {x: 0.0, y: 0.0, z: 0.00, yaw: 1.57}
-        """
         x = float(pose_cfg.get("x", 0.0))
         y = float(pose_cfg.get("y", 0.0))
-        z = float(pose_cfg.get("z", 0.00))
+        z = float(pose_cfg.get("z", 0.0))
         yaw = float(pose_cfg.get("yaw", 0.0))
 
         state = ModelState()
@@ -849,9 +944,11 @@ class RLWallFollowerD2:
         state.twist.angular.y = 0.0
         state.twist.angular.z = 0.0
 
+        if self.set_model_state_srv is None:
+            raise RuntimeError("set_model_state service is not available")
         self.set_model_state_srv(state)
 
-    def _save_q_table(self, path: str):
+    def _save_q_table(self, path: str, checkpoint_kind: str, completed_episodes: Optional[int] = None):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         saved_at = self._utc_iso()
         payload = {
@@ -862,12 +959,16 @@ class RLWallFollowerD2:
                 "gamma": self.gamma,
                 "epsilon": self.epsilon,
                 "random_seed": self.random_seed,
-                "completed_episodes": self.episode_idx,
+                "completed_episodes": int(
+                    self.episode_idx if completed_episodes is None else completed_episodes
+                ),
                 "run_id": self.run_id,
                 "run_started_at_utc": self.run_started_at_utc,
                 "last_saved_at_utc": saved_at,
                 "run_finished_at_utc": self.training_finished_at_utc,
                 "source_qtable_path": self.qtable_input_path,
+                "checkpoint_kind": checkpoint_kind,
+                "best_eval_score": None if self.best_eval_score == float("-inf") else self.best_eval_score,
             },
             "states": self.q_table,
         }
@@ -879,9 +980,17 @@ class RLWallFollowerD2:
             return
         if completed_episodes % self.checkpoint_every_episodes != 0:
             return
-        self._save_q_table(self.latest_qtable_output_path)
+        self._save_q_table(
+            self.latest_qtable_output_path,
+            checkpoint_kind="latest",
+            completed_episodes=completed_episodes,
+        )
         if self.run_latest_qtable_output_path != self.latest_qtable_output_path:
-            self._save_q_table(self.run_latest_qtable_output_path)
+            self._save_q_table(
+                self.run_latest_qtable_output_path,
+                checkpoint_kind="latest",
+                completed_episodes=completed_episodes,
+            )
 
     def _append_metrics_row(self, stats: EpisodeStats):
         self._append_metrics_row_to_path(self.metrics_csv_path, stats)
@@ -891,22 +1000,45 @@ class RLWallFollowerD2:
     def _append_metrics_row_to_path(self, path: str, stats: EpisodeStats):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         file_exists = os.path.exists(path)
-
         with open(path, "a", encoding="utf-8", newline="") as f:
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(["episode", "reward", "steps", "collisions", "epsilon"])
-            writer.writerow([
-                stats.episode_idx,
-                f"{stats.total_reward:.6f}",
-                stats.steps,
-                stats.collisions,
-                f"{self.epsilon:.6f}",
-            ])
+            writer.writerow(
+                [
+                    stats.episode_idx,
+                    f"{stats.total_reward:.6f}",
+                    stats.steps,
+                    stats.collisions,
+                    f"{self.epsilon:.6f}",
+                ]
+            )
 
-    # ---------------------------------------------------------------------
-    # Motion publishing helpers
-    # ---------------------------------------------------------------------
+    def _append_eval_row(self, stats: EvaluationStats):
+        self._append_eval_row_to_path(self.eval_csv_path, stats)
+        if self.run_eval_csv_path != self.eval_csv_path:
+            self._append_eval_row_to_path(self.run_eval_csv_path, stats)
+
+    def _append_eval_row_to_path(self, path: str, stats: EvaluationStats):
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        file_exists = os.path.exists(path)
+        with open(path, "a", encoding="utf-8", newline="") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(
+                    ["completed_episodes", "score", "successes", "failures", "collisions", "traps"]
+                )
+            writer.writerow(
+                [
+                    stats.completed_episodes,
+                    f"{stats.score:.6f}",
+                    stats.successes,
+                    stats.failures,
+                    stats.collisions,
+                    stats.traps,
+                ]
+            )
+
     def _publish_action(self, action_name: str):
         cfg = self.actions[action_name]
         cmd = Twist()
@@ -917,6 +1049,20 @@ class RLWallFollowerD2:
 
     def _publish_stop(self):
         self.cmd_pub.publish(Twist())
+
+    @staticmethod
+    def _all_state_keys() -> List[str]:
+        state_keys = []
+        for front_bin in FRONT_BINS:
+            for right_bin in RIGHT_BINS:
+                for heading_bin in HEADING_BINS:
+                    for front_left_open in OPEN_BINS:
+                        for front_right_open in OPEN_BINS:
+                            state_keys.append(
+                                f"{front_bin}|{right_bin}|{heading_bin}|"
+                                f"{front_left_open}|{front_right_open}"
+                            )
+        return state_keys
 
 
 def main():

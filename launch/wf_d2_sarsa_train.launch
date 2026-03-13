@@ -3,9 +3,10 @@
   <arg name="qtable_output_path" default="$(find wall_following_triton)/artifacts/qtable_d2_sarsa_best.yaml"/>
   <arg name="latest_qtable_output_path" default="$(find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml"/>
   <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_sarsa_metrics.csv"/>
+  <arg name="eval_csv_path" default="$(find wall_following_triton)/artifacts/d2_sarsa_eval.csv"/>
   <arg name="control_hz" default="6.0"/>
-  <arg name="max_episodes" default="320"/>
-  <arg name="max_steps_per_episode" default="500"/>
+  <arg name="max_episodes" default="420"/>
+  <arg name="max_steps_per_episode" default="240"/>
   <arg name="resume_training_state" default="true"/>
   <arg name="acquire_wall_enabled" default="false"/>
 
@@ -16,6 +17,7 @@
     <arg name="qtable_output_path" value="$(arg qtable_output_path)"/>
     <arg name="latest_qtable_output_path" value="$(arg latest_qtable_output_path)"/>
     <arg name="metrics_csv_path" value="$(arg metrics_csv_path)"/>
+    <arg name="eval_csv_path" value="$(arg eval_csv_path)"/>
     <arg name="control_hz" value="$(arg control_hz)"/>
     <arg name="max_episodes" value="$(arg max_episodes)"/>
     <arg name="max_steps_per_episode" value="$(arg max_steps_per_episode)"/>

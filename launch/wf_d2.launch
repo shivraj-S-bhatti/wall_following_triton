@@ -1,8 +1,5 @@
 <launch>
-  <!--
-    Single launch entrypoint for Deliverable 2.
-    Required by rubric: user can choose algorithm and mode.
-  -->
+  <!-- Single D2 entrypoint with algorithm/mode selection required by the rubric. -->
 
   <arg name="algorithm" default="q_learning"/>
   <arg name="mode" default="train"/>
@@ -10,20 +7,25 @@
   <arg name="scan_topic" default="/scan"/>
   <arg name="cmd_topic" default="/cmd_vel"/>
   <arg name="control_hz" default="6.0"/>
-  <arg name="max_episodes" default="320"/>
-  <arg name="max_steps_per_episode" default="500"/>
+  <arg name="max_episodes" default="420"/>
+  <arg name="max_steps_per_episode" default="240"/>
   <arg name="resume_training_state" default="true"/>
   <arg name="acquire_wall_enabled" default="false"/>
+  <arg name="actions_path" default="$(find wall_following_triton)/config/actions_d2.yaml"/>
 
-  <!-- Q-table I/O paths -->
   <arg name="qtable_input_path" default="$(find wall_following_triton)/config/qtable_d1.yaml"/>
-  <arg name="qtable_output_path" default="$(find wall_following_triton)/config/qtable_d2_qlearning_best.yaml"/>
+  <arg name="qtable_output_path" default="$(find wall_following_triton)/artifacts/qtable_d2_best.yaml"/>
   <arg name="latest_qtable_output_path" default=""/>
-
-  <!-- CSV metrics output for reward-vs-episode plots -->
   <arg name="metrics_csv_path" default="$(find wall_following_triton)/artifacts/d2_training_metrics.csv"/>
+  <arg name="eval_csv_path" default="$(find wall_following_triton)/artifacts/d2_eval_metrics.csv"/>
 
-  <!-- Start simulator + robot/world -->
+  <!-- Test-only manual start override -->
+  <arg name="test_start_enabled" default="false"/>
+  <arg name="test_start_x" default="0.0"/>
+  <arg name="test_start_y" default="0.0"/>
+  <arg name="test_start_yaw" default="0.0"/>
+  <arg name="test_start_z" default="0.0"/>
+
   <include file="$(find stingray_sim)/launch/wall_following.launch"/>
 
   <node pkg="wall_following_triton"
@@ -32,10 +34,8 @@
         output="screen"
         respawn="false">
 
-    <!-- Load parameter defaults from YAML first -->
     <rosparam command="load" file="$(find wall_following_triton)/config/d2_params.yaml"/>
 
-    <!-- Then apply launch-time overrides -->
     <param name="algorithm" value="$(arg algorithm)"/>
     <param name="mode" value="$(arg mode)"/>
 
@@ -46,11 +46,18 @@
     <param name="max_steps_per_episode" value="$(arg max_steps_per_episode)"/>
     <param name="resume_training_state" value="$(arg resume_training_state)"/>
     <param name="acquire_wall_enabled" value="$(arg acquire_wall_enabled)"/>
+    <param name="actions_path" value="$(arg actions_path)"/>
 
-    <param name="actions_path" value="$(find wall_following_triton)/config/actions.yaml"/>
     <param name="qtable_input_path" value="$(arg qtable_input_path)"/>
     <param name="qtable_output_path" value="$(arg qtable_output_path)"/>
     <param name="latest_qtable_output_path" value="$(arg latest_qtable_output_path)"/>
     <param name="metrics_csv_path" value="$(arg metrics_csv_path)"/>
+    <param name="eval_csv_path" value="$(arg eval_csv_path)"/>
+
+    <param name="test_start_enabled" value="$(arg test_start_enabled)"/>
+    <param name="test_start_x" value="$(arg test_start_x)"/>
+    <param name="test_start_y" value="$(arg test_start_y)"/>
+    <param name="test_start_yaw" value="$(arg test_start_yaw)"/>
+    <param name="test_start_z" value="$(arg test_start_z)"/>
   </node>
 </launch>

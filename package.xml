@@ -5,7 +5,8 @@
   <description>
     COMPSCI 603 Project 2 package for Triton right-wall following.
     Includes D1 manual policy support plus D2 Q-learning and SARSA
-    with separate training and testing launch flows.
+    with separate training and testing launch flows, evaluation-selected
+    checkpoints, and manual test-start overrides for edge-case validation.
   </description>
 
   <maintainer email="shivraj.bhatti@example.com">Shivraj Bhatti</maintainer>

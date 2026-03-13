@@ -10,8 +10,8 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh save pre_pull_$(date +%Y%m%d_%H%M%S)
 
 git fetch origin
-git checkout codex/d2
-git pull --ff-only origin codex/d2
+git checkout codex/d2-converge
+git pull --ff-only origin codex/d2-converge
 
 cd ~/catkin_ws
 source /opt/ros/noetic/setup.bash
@@ -93,14 +93,14 @@ Headless mode keeps Gazebo physics running and kills the GUI client after launch
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 If no latest checkpoint exists yet, start from D1:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 ## Run SARSA Headless
@@ -109,14 +109,14 @@ Fresh SARSA run:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 Resume SARSA:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=320 max_steps_per_episode:=500 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
 ```
 
 ## Quick Progress Checks
@@ -189,6 +189,15 @@ Test the current SARSA policy from the live latest checkpoint:
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
 ./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml
+
+Test a manual edge case by teleporting the robot once at launch:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_best.yaml \
+  test_start_enabled:=true test_start_x:=1.46 test_start_y:=-1.223 test_start_yaw:=0.079
+```
 ```
 
 ## Greedy Policy Tests
@@ -228,9 +237,10 @@ cd ~/catkin_ws/src/wall_following_triton
 ## Current Practical Defaults
 
 - `control_hz: 6.0`
-- `q_learning max_episodes: 320`
-- `sarsa max_episodes: 320`
-- `max_steps_per_episode: 500`
+- `q_learning max_episodes: 420`
+- `sarsa max_episodes: 420`
+- `max_steps_per_episode: 240`
 - live training outputs go to ignored `artifacts/`
 - every run is mirrored to `artifacts/runs/<algorithm>/<run_id>/`
 - tracked `config/*best.yaml` files are only for deliberate promotion through `d2_state.sh`
+- eval CSVs live beside the reward CSVs and drive `best.yaml` selection

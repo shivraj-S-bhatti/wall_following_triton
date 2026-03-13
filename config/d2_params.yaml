@@ -1,41 +1,46 @@
-# Deliverable 2 parameter defaults for RL training/testing.
+# Deliverable 2 convergence-focused defaults.
 #
-# This file is loaded under the rl_d2_agent node namespace in launch.
-# You can tune values here without touching Python code.
+# D1 remains unchanged. These params are for the D2 RL agent only.
 
-# RL algorithm hyperparameters
-alpha: 0.20
+# RL hyperparameters
+alpha: 0.15
 gamma: 0.95
 epsilon: 0.20
-epsilon_min: 0.05
-epsilon_decay: 0.996
+epsilon_min: 0.03
+epsilon_decay: 0.994
 
-# Control frequency (Hz). Each timer tick performs one RL step.
+# Control frequency (Hz). One timer tick corresponds to one RL step.
 control_hz: 6.0
 
-# Training budget
-max_episodes: 320
-max_steps_per_episode: 500
+# Training budget tuned for a single overnight run with more resets and fewer
+# long bad trajectories.
+max_episodes: 420
+max_steps_per_episode: 240
 training_done_stop: true
 checkpoint_every_episodes: 1
 resume_training_state: true
 reset_settle_seconds: 0.20
 reset_retry_attempts: 3
 
-# Reward shaping terms
-reward_right_good: 1.00
-reward_right_too_close: -0.80
-reward_right_too_far: -0.60
-reward_heading_parallel: 0.60
-reward_heading_off: -0.20
-reward_front_safe: 0.20
-reward_front_too_close: -2.50
-reward_forward_scale: 0.50
-reward_front_blocked_correct_turn: 1.20
-reward_front_blocked_wrong_turn: -1.20
-reward_front_blocked_straight: -1.60
+# Fixed greedy evaluation of checkpoints.
+eval_every_episodes: 20
+eval_max_steps_per_start: 100
+eval_failure_penalty: -6.0
 
-# Collision handling
+# Reward shaping
+reward_front_clear: 0.30
+reward_front_blocked: -1.40
+reward_right_good: 1.20
+reward_right_too_close: -1.00
+reward_right_too_far: -0.80
+reward_heading_parallel: 0.35
+reward_heading_off: -0.10
+reward_progress_scale: 0.20
+reward_blocked_preferred_turn: 0.90
+reward_blocked_wrong_turn: -1.10
+reward_blocked_straight: -1.40
+
+# Collision and instability handling
 collision_distance: 0.30
 collision_penalty: -8.00
 trapped_position_epsilon: 0.008
@@ -45,24 +50,29 @@ trapped_penalty: -4.00
 tilt_termination_deg: 55.0
 z_termination_height: 0.25
 
-# Test-mode acquisition prior for arbitrary spawn points.
-# Handoff matches the wall-following state threshold so test-time search does
-# not dump open-space behavior back onto the RL policy too early.
+# Test-only acquisition prior for arbitrary manual starts.
 acquire_wall_enabled: false
 acquire_wall_distance: 0.95
-acquire_front_turn_distance: 0.90
+acquire_front_turn_distance: 0.85
 
-# State encoder thresholds (same baseline as D1)
-front_too_close: 0.55
+# D2 encoder thresholds
+front_blocked_threshold: 0.55
 right_too_close: 0.55
 right_too_far: 0.95
 heading_parallel_tolerance: 0.10
+opening_distance_threshold: 1.20
+
+# D2 encoder sectors for Triton's project frame (+Y forward, scan angle 0 on +X)
 front_sector_start_deg: 75.0
 front_sector_end_deg: 105.0
-right_front_sector_start_deg: 20.0
-right_front_sector_end_deg: 70.0
+right_front_sector_start_deg: 15.0
+right_front_sector_end_deg: 65.0
 right_rear_sector_start_deg: -70.0
 right_rear_sector_end_deg: -20.0
+front_left_open_sector_start_deg: 100.0
+front_left_open_sector_end_deg: 155.0
+front_right_open_sector_start_deg: 25.0
+front_right_open_sector_end_deg: 85.0
 
 # Gazebo reset model name
 robot_model_name: triton
@@ -70,11 +80,18 @@ robot_model_name: triton
 # Reproducibility
 random_seed: 603
 
-# Candidate start poses used in train mode episode resets.
-# These are the validated near-wall seeds. Raw captured poses remain in
-# artifacts/captured_start_poses.yaml if you want to re-test them manually.
+# Validated near-wall training seeds only.
 start_poses:
   - {x: 1.286, y: 1.052, z: 0.00, yaw: 0.022}
   - {x: 1.460, y: -1.223, z: 0.00, yaw: 0.079}
   - {x: 3.343, y: -2.177, z: 0.00, yaw: -1.981}
   - {x: 3.157, y: 3.185, z: 0.00, yaw: -1.425}
+
+# Fixed evaluation starts. These can be tuned on the VM, but the defaults are
+# stable near-wall starts that span multiple map regions.
+eval_start_poses:
+  - {x: 1.286, y: 1.052, z: 0.00, yaw: 0.022}
+  - {x: 1.460, y: -1.223, z: 0.00, yaw: 0.079}
+  - {x: 3.343, y: -2.177, z: 0.00, yaw: -1.981}
+  - {x: 3.157, y: 3.185, z: 0.00, yaw: -1.425}
+  - {x: 2.350, y: 0.650, z: 0.00, yaw: -1.570}

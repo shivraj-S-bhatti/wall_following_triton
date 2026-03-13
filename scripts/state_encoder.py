@@ -20,6 +20,28 @@ class EncodedState:
         return f"{self.front_bin}|{self.right_bin}|{self.heading_bin}"
 
 
+@dataclass(frozen=True)
+class D2EncodedState:
+    front_bin: str
+    right_bin: str
+    heading_bin: str
+    front_left_open_bin: str
+    front_right_open_bin: str
+    front_min: float
+    right_front: float
+    right_rear: float
+    right_min: float
+    front_left_min: float
+    front_right_min: float
+
+    @property
+    def key(self) -> str:
+        return (
+            f"{self.front_bin}|{self.right_bin}|{self.heading_bin}|"
+            f"{self.front_left_open_bin}|{self.front_right_open_bin}"
+        )
+
+
 class StateEncoder:
     def __init__(
         self,
@@ -123,3 +145,113 @@ class StateEncoder:
         if s <= e:
             return s <= a <= e
         return a >= s or a <= e
+
+
+class D2StateEncoder:
+    """D2-specific state encoder with opening bits for corners and dead ends."""
+
+    def __init__(
+        self,
+        front_blocked_threshold: float = 0.55,
+        right_too_close: float = 0.55,
+        right_too_far: float = 0.95,
+        heading_parallel_tolerance: float = 0.10,
+        opening_distance_threshold: float = 1.20,
+        front_sector_start_deg: float = 75.0,
+        front_sector_end_deg: float = 105.0,
+        right_front_sector_start_deg: float = 20.0,
+        right_front_sector_end_deg: float = 70.0,
+        right_rear_sector_start_deg: float = -70.0,
+        right_rear_sector_end_deg: float = -20.0,
+        front_left_open_sector_start_deg: float = 95.0,
+        front_left_open_sector_end_deg: float = 155.0,
+        front_right_open_sector_start_deg: float = 25.0,
+        front_right_open_sector_end_deg: float = 85.0,
+    ):
+        self.front_blocked_threshold = float(front_blocked_threshold)
+        self.right_too_close = float(right_too_close)
+        self.right_too_far = float(right_too_far)
+        self.heading_parallel_tolerance = float(heading_parallel_tolerance)
+        self.opening_distance_threshold = float(opening_distance_threshold)
+        self.front_sector_start_deg = float(front_sector_start_deg)
+        self.front_sector_end_deg = float(front_sector_end_deg)
+        self.right_front_sector_start_deg = float(right_front_sector_start_deg)
+        self.right_front_sector_end_deg = float(right_front_sector_end_deg)
+        self.right_rear_sector_start_deg = float(right_rear_sector_start_deg)
+        self.right_rear_sector_end_deg = float(right_rear_sector_end_deg)
+        self.front_left_open_sector_start_deg = float(front_left_open_sector_start_deg)
+        self.front_left_open_sector_end_deg = float(front_left_open_sector_end_deg)
+        self.front_right_open_sector_start_deg = float(front_right_open_sector_start_deg)
+        self.front_right_open_sector_end_deg = float(front_right_open_sector_end_deg)
+
+    def encode(self, scan_msg) -> D2EncodedState:
+        front_min = self._sector_min(scan_msg, self.front_sector_start_deg, self.front_sector_end_deg)
+        right_front = self._sector_min(
+            scan_msg,
+            self.right_front_sector_start_deg,
+            self.right_front_sector_end_deg,
+        )
+        right_rear = self._sector_min(
+            scan_msg,
+            self.right_rear_sector_start_deg,
+            self.right_rear_sector_end_deg,
+        )
+        front_left_min = self._sector_min(
+            scan_msg,
+            self.front_left_open_sector_start_deg,
+            self.front_left_open_sector_end_deg,
+        )
+        front_right_min = self._sector_min(
+            scan_msg,
+            self.front_right_open_sector_start_deg,
+            self.front_right_open_sector_end_deg,
+        )
+        right_min = min(right_front, right_rear)
+
+        front_bin = "blocked" if front_min < self.front_blocked_threshold else "clear"
+
+        if right_min < self.right_too_close:
+            right_bin = "too_close"
+        elif right_min > self.right_too_far:
+            right_bin = "too_far"
+        else:
+            right_bin = "good"
+
+        heading_delta = right_front - right_rear
+        if abs(heading_delta) <= self.heading_parallel_tolerance:
+            heading_bin = "parallel"
+        elif heading_delta < 0.0:
+            heading_bin = "toward_wall"
+        else:
+            heading_bin = "away_from_wall"
+
+        front_left_open_bin = (
+            "open" if front_left_min > self.opening_distance_threshold else "closed"
+        )
+        front_right_open_bin = (
+            "open" if front_right_min > self.opening_distance_threshold else "closed"
+        )
+
+        return D2EncodedState(
+            front_bin=front_bin,
+            right_bin=right_bin,
+            heading_bin=heading_bin,
+            front_left_open_bin=front_left_open_bin,
+            front_right_open_bin=front_right_open_bin,
+            front_min=front_min,
+            right_front=right_front,
+            right_rear=right_rear,
+            right_min=right_min,
+            front_left_min=front_left_min,
+            front_right_min=front_right_min,
+        )
+
+    def _sector_min(self, scan_msg, start_deg: float, end_deg: float) -> float:
+        return StateEncoder._sector_min(self, scan_msg, start_deg, end_deg)
+
+    @staticmethod
+    def _normalize_angle(angle_rad: float) -> float:
+        return StateEncoder._normalize_angle(angle_rad)
+
+    def _angle_in_sector(self, angle: float, sector_start: float, sector_end: float) -> bool:
+        return StateEncoder._angle_in_sector(self, angle, sector_start, sector_end)

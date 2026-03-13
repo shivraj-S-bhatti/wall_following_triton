@@ -10,8 +10,10 @@ This repository contains:
 
 - `scripts/wf_policy_node.py`: D1 policy node
 - `scripts/rl_d2_agent.py`: D2 learning/testing node
-- `scripts/state_encoder.py`: LiDAR discretization into `(front_bin, right_bin, heading_bin)`
-- `config/actions.yaml`: discrete action set
+- `scripts/state_encoder.py`: D1 encoder plus D2 72-state encoder
+- `scripts/plot_d2_metrics.py`: reward/eval plotting helper
+- `config/actions.yaml`: D1 discrete action set
+- `config/actions_d2.yaml`: D2 discrete action set
 - `config/qtable_d1.yaml`: D1 manual prior table
 - `config/qtable_d2_qlearning_best.yaml`: chosen final Q-learning policy for testing/submission
 - `config/qtable_d2_sarsa_best.yaml`: chosen final SARSA policy for testing/submission
@@ -74,6 +76,17 @@ roslaunch wall_following_triton wf_d2_sarsa_train.launch
 roslaunch wall_following_triton wf_d2_sarsa_test.launch
 ```
 
+### D2 Design
+
+- D1 keeps the original 18-state encoding.
+- D2 uses a richer 72-state local geometry encoding:
+  - `front_bin`
+  - `right_bin`
+  - `heading_bin`
+  - `front_left_open_bin`
+  - `front_right_open_bin`
+- D2 `best.yaml` is selected by fixed greedy evaluation, not by the single highest training-episode reward.
+
 ### Training Behavior
 
 - Train launches start from near-wall seeded poses.
@@ -82,17 +95,22 @@ roslaunch wall_following_triton wf_d2_sarsa_test.launch
   - `artifacts/qtable_d2_qlearning_best.yaml`
   - `artifacts/qtable_d2_qlearning_latest.yaml`
   - `artifacts/d2_qlearning_metrics.csv`
+  - `artifacts/d2_qlearning_eval.csv`
   - `artifacts/qtable_d2_sarsa_best.yaml`
   - `artifacts/qtable_d2_sarsa_latest.yaml`
   - `artifacts/d2_sarsa_metrics.csv`
+  - `artifacts/d2_sarsa_eval.csv`
 - Every train run is also mirrored into a timestamped ignored run folder:
   - `artifacts/runs/q_learning/<run_id>/...`
   - `artifacts/runs/sarsa/<run_id>/...`
 - Q-table metadata now includes:
   - `run_id`
+  - `completed_episodes`
   - `run_started_at_utc`
   - `last_saved_at_utc`
   - `run_finished_at_utc`
+  - `checkpoint_kind`
+  - `best_eval_score`
 
 ### State Management
 
@@ -117,9 +135,26 @@ This script:
 
 - Test launches load a chosen learned Q-table and run greedily.
 - Test launches enable a simple test-only acquisition pre-controller for arbitrary spawn points.
+- Test launches can optionally teleport Triton to a manual edge-case pose:
+  - `test_start_enabled:=true`
+  - `test_start_x:=...`
+  - `test_start_y:=...`
+  - `test_start_yaw:=...`
+  - optional `test_start_z:=...`
 - The submitted package should include the final chosen greedy tables in:
   - `config/qtable_d2_qlearning_best.yaml`
   - `config/qtable_d2_sarsa_best.yaml`
+
+Example manual edge-case test:
+
+```bash
+roslaunch wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_best.yaml \
+  test_start_enabled:=true \
+  test_start_x:=1.46 \
+  test_start_y:=-1.223 \
+  test_start_yaw:=0.079
+```
 
 ### Promote A Chosen Learned Table Into `config/`
 
@@ -131,39 +166,11 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh promote sarsa best
 ```
 
-### Generate Reward-Curve Figure
+### Generate Reward And Evaluation Figures
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-python3 - <<'PY'
-import csv
-import matplotlib.pyplot as plt
-
-series = [
-    ("Q-learning", "artifacts/d2_qlearning_metrics.csv"),
-    ("SARSA", "artifacts/d2_sarsa_metrics.csv"),
-]
-
-for label, path in series:
-    episodes = []
-    rewards = []
-    with open(path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            episodes.append(int(row["episode"]))
-            rewards.append(float(row["reward"]))
-    if episodes:
-        plt.plot(episodes, rewards, label=label)
-
-plt.xlabel("Episode")
-plt.ylabel("Accumulated Reward")
-plt.title("Deliverable 2 Learning Curves")
-plt.grid(True, alpha=0.3)
-plt.legend()
-plt.tight_layout()
-plt.savefig("artifacts/d2_learning_curves.png", dpi=160)
-print("saved artifacts/d2_learning_curves.png")
-PY
+python3 scripts/plot_d2_metrics.py --output artifacts/d2_converge_plots.png
 ```
 
 ## Quick Validation
