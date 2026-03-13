@@ -48,3 +48,38 @@ named_test_poses:
     yaw: -1.433
     use_for_training: true
     description: Shifted inward upper-west seed for reacquisition and corner entry.
+  bottom_corridor_u_turn:
+    x: 2.524
+    y: 1.336
+    z: 0.00
+    yaw: 3.048
+    use_for_training: false
+    description: Captured manually at the lower corridor U-turn / divider approach.
+  bottom_right_corner:
+    x: 3.361
+    y: -3.033
+    z: 0.00
+    yaw: -2.879
+    use_for_training: false
+    description: Captured manually at the lower-right corner entry.
+  centre_nearing_divider:
+    x: -0.248
+    y: -0.735
+    z: 0.00
+    yaw: 1.377
+    use_for_training: false
+    description: Captured manually near the central divider for edge-case probing.
+  i_beam_facing_north:
+    x: 0.731
+    y: -2.815
+    z: 0.00
+    yaw: 1.232
+    use_for_training: false
+    description: Captured manually facing the I-beam corridor northbound.
+  right_corridor_dead_end:
+    x: -2.883
+    y: 2.963
+    z: 0.00
+    yaw: 1.848
+    use_for_training: false
+    description: Captured manually at the right-side dead-end / U-turn probe.
