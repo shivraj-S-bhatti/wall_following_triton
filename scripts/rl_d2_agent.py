@@ -100,6 +100,18 @@ class RLWallFollowerD2:
         self.reward_too_far_straight_other = float(
             rospy.get_param("~reward_too_far_straight_other", -0.10)
         )
+        self.reward_good_parallel_straight = float(
+            rospy.get_param("~reward_good_parallel_straight", 0.35)
+        )
+        self.reward_good_parallel_turn = float(rospy.get_param("~reward_good_parallel_turn", -0.20))
+        self.reward_good_toward_soft = float(rospy.get_param("~reward_good_toward_soft", 0.30))
+        self.reward_good_toward_hard = float(rospy.get_param("~reward_good_toward_hard", 0.08))
+        self.reward_good_away_soft = float(rospy.get_param("~reward_good_away_soft", 0.30))
+        self.reward_good_away_hard = float(rospy.get_param("~reward_good_away_hard", 0.08))
+        self.reward_good_wrong_turn = float(rospy.get_param("~reward_good_wrong_turn", -0.35))
+        self.reward_good_straight_when_off = float(
+            rospy.get_param("~reward_good_straight_when_off", -0.12)
+        )
         self.reward_blocked_preferred_turn = float(
             rospy.get_param("~reward_blocked_preferred_turn", 0.90)
         )
@@ -622,6 +634,31 @@ class RLWallFollowerD2:
             reward += self.reward_heading_off
 
         reward += self.reward_progress_scale * self._action_progress_speed(action_name)
+
+        if state.front_bin == "clear" and state.right_bin == "good":
+            if state.heading_bin == "parallel":
+                if turn_direction == "straight":
+                    reward += self.reward_good_parallel_straight
+                else:
+                    reward += self.reward_good_parallel_turn
+            elif state.heading_bin == "toward_wall":
+                if action_name == "turn_left_soft":
+                    reward += self.reward_good_toward_soft
+                elif action_name == "turn_left_hard":
+                    reward += self.reward_good_toward_hard
+                elif turn_direction == "straight":
+                    reward += self.reward_good_straight_when_off
+                else:
+                    reward += self.reward_good_wrong_turn
+            elif state.heading_bin == "away_from_wall":
+                if action_name == "turn_right_soft":
+                    reward += self.reward_good_away_soft
+                elif action_name == "turn_right_hard":
+                    reward += self.reward_good_away_hard
+                elif turn_direction == "straight":
+                    reward += self.reward_good_straight_when_off
+                else:
+                    reward += self.reward_good_wrong_turn
 
         if state.front_bin == "clear" and state.right_bin == "too_far":
             if turn_direction == "right":
