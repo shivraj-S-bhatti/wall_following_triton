@@ -37,6 +37,9 @@ experiment or artifact.
   "leave the right wall and keep going" locally attractive.
 - Reward in good states was too action-flat, which made orbiting, jittering, and
   over-correction profitable enough to persist.
+- Hard-turn rewards in otherwise good states also stayed too high for too long,
+  which encouraged pivoting and "baby-step" forward progress instead of confident
+  corridor tracking.
 - Training logs were initially misleading because they printed the next action
   next to the previous action's reward, which made reward debugging harder than
   it needed to be.
