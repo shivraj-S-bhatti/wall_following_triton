@@ -80,7 +80,8 @@ class RLWallFollowerD2:
 
         self.eval_every_episodes = max(0, int(rospy.get_param("~eval_every_episodes", 20)))
         self.eval_max_steps_per_start = max(1, int(rospy.get_param("~eval_max_steps_per_start", 100)))
-        self.eval_failure_penalty = float(rospy.get_param("~eval_failure_penalty", -6.0))
+        self.eval_failure_penalty = float(rospy.get_param("~eval_failure_penalty", -25.0))
+        self.eval_success_hold_steps = max(1, int(rospy.get_param("~eval_success_hold_steps", 12)))
 
         self.reward_front_clear = float(rospy.get_param("~reward_front_clear", 0.30))
         self.reward_front_blocked = float(rospy.get_param("~reward_front_blocked", -1.40))
@@ -91,26 +92,26 @@ class RLWallFollowerD2:
         self.reward_heading_off = float(rospy.get_param("~reward_heading_off", -0.10))
         self.reward_progress_scale = float(rospy.get_param("~reward_progress_scale", 0.20))
         self.reward_too_far_preferred_turn = float(
-            rospy.get_param("~reward_too_far_preferred_turn", 0.35)
+            rospy.get_param("~reward_too_far_preferred_turn", 0.80)
         )
-        self.reward_too_far_wrong_turn = float(rospy.get_param("~reward_too_far_wrong_turn", -0.25))
+        self.reward_too_far_wrong_turn = float(rospy.get_param("~reward_too_far_wrong_turn", -0.45))
         self.reward_too_far_straight_toward = float(
-            rospy.get_param("~reward_too_far_straight_toward", 0.20)
+            rospy.get_param("~reward_too_far_straight_toward", -0.05)
         )
         self.reward_too_far_straight_other = float(
-            rospy.get_param("~reward_too_far_straight_other", -0.10)
+            rospy.get_param("~reward_too_far_straight_other", -0.40)
         )
         self.reward_good_parallel_straight = float(
             rospy.get_param("~reward_good_parallel_straight", 0.35)
         )
-        self.reward_good_parallel_turn = float(rospy.get_param("~reward_good_parallel_turn", -0.20))
+        self.reward_good_parallel_turn = float(rospy.get_param("~reward_good_parallel_turn", -0.55))
         self.reward_good_toward_soft = float(rospy.get_param("~reward_good_toward_soft", 0.30))
-        self.reward_good_toward_hard = float(rospy.get_param("~reward_good_toward_hard", 0.08))
+        self.reward_good_toward_hard = float(rospy.get_param("~reward_good_toward_hard", -0.05))
         self.reward_good_away_soft = float(rospy.get_param("~reward_good_away_soft", 0.30))
-        self.reward_good_away_hard = float(rospy.get_param("~reward_good_away_hard", 0.08))
-        self.reward_good_wrong_turn = float(rospy.get_param("~reward_good_wrong_turn", -0.35))
+        self.reward_good_away_hard = float(rospy.get_param("~reward_good_away_hard", -0.05))
+        self.reward_good_wrong_turn = float(rospy.get_param("~reward_good_wrong_turn", -0.65))
         self.reward_good_straight_when_off = float(
-            rospy.get_param("~reward_good_straight_when_off", -0.12)
+            rospy.get_param("~reward_good_straight_when_off", -0.55)
         )
         self.reward_blocked_preferred_turn = float(
             rospy.get_param("~reward_blocked_preferred_turn", 0.90)
@@ -248,14 +249,36 @@ class RLWallFollowerD2:
 
         rospy.loginfo("RLWallFollowerD2 started")
         rospy.loginfo("algorithm=%s mode=%s", self.algorithm, self.mode)
-        rospy.loginfo("alpha=%.3f gamma=%.3f epsilon=%.3f", self.alpha, self.gamma, self.epsilon)
-        rospy.loginfo("qtable_input=%s", self.qtable_input_path)
-        rospy.loginfo("qtable_output=%s", self.qtable_output_path)
+        effective_epsilon = 0.0 if self.mode == "test" else self.epsilon
         rospy.loginfo(
-            "latest_qtable_output=%s eval_csv=%s",
-            self.latest_qtable_output_path,
-            self.eval_csv_path,
+            "alpha=%.3f gamma=%.3f epsilon=%.3f effective_epsilon=%.3f",
+            self.alpha,
+            self.gamma,
+            self.epsilon,
+            effective_epsilon,
         )
+        rospy.loginfo("qtable_input=%s", self.qtable_input_path)
+        if self.mode == "test":
+            rospy.loginfo(
+                "loaded_qtable_metadata: run_id=%s completed_episodes=%s finished=%s source=%s",
+                self.loaded_qtable_metadata.get("run_id", "-"),
+                self.loaded_qtable_metadata.get("completed_episodes", "-"),
+                self.loaded_qtable_metadata.get("run_finished_at_utc", "-"),
+                self.loaded_qtable_metadata.get("source_qtable_path", "-"),
+            )
+            rospy.loginfo(
+                "test mode: qtable outputs are read-only (best=%s latest=%s eval_csv=%s)",
+                self.qtable_output_path,
+                self.latest_qtable_output_path,
+                self.eval_csv_path,
+            )
+        else:
+            rospy.loginfo("qtable_output=%s", self.qtable_output_path)
+            rospy.loginfo(
+                "latest_qtable_output=%s eval_csv=%s",
+                self.latest_qtable_output_path,
+                self.eval_csv_path,
+            )
         rospy.loginfo("run_id=%s run_artifact_dir=%s", self.run_id, self.run_artifact_dir)
 
         if self.mode == "train":
@@ -665,6 +688,8 @@ class RLWallFollowerD2:
                 reward += self.reward_too_far_preferred_turn
             elif turn_direction == "left":
                 reward += self.reward_too_far_wrong_turn
+            elif state.front_right_open_bin == "open":
+                reward += self.reward_too_far_straight_other
             elif state.heading_bin == "toward_wall":
                 reward += self.reward_too_far_straight_toward
             else:
@@ -873,13 +898,12 @@ class RLWallFollowerD2:
         prev_action: Optional[str] = None
         collisions = 0
         traps = 0
-        success = True
+        success = False
+        stable_follow_steps = 0
 
         for _ in range(self.eval_max_steps_per_start):
             state = self._wait_for_encoded_state(timeout=1.5)
             if state is None:
-                score += self.eval_failure_penalty
-                success = False
                 break
 
             current_key = state.key
@@ -902,9 +926,15 @@ class RLWallFollowerD2:
             score += reward
 
             if termination_reason is not None:
-                score += self.eval_failure_penalty
-                success = False
                 break
+
+            if self._is_eval_success_state(state):
+                stable_follow_steps += 1
+                if stable_follow_steps >= self.eval_success_hold_steps:
+                    success = True
+                    break
+            else:
+                stable_follow_steps = 0
 
             action = self._select_greedy_action(current_key)
             self._publish_action(action)
@@ -912,7 +942,17 @@ class RLWallFollowerD2:
             rospy.sleep(1.0 / max(self.control_hz, 1.0))
 
         self._publish_stop()
+        if not success:
+            score = min(score, 0.0) + self.eval_failure_penalty
         return score, success, collisions, traps
+
+    @staticmethod
+    def _is_eval_success_state(state: D2EncodedState) -> bool:
+        return (
+            state.front_bin == "clear"
+            and state.right_bin == "good"
+            and state.heading_bin == "parallel"
+        )
 
     def _wait_for_encoded_state(self, timeout: float) -> Optional[D2EncodedState]:
         deadline = rospy.Time.now() + rospy.Duration(timeout)
