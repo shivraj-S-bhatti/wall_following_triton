@@ -35,6 +35,9 @@ experiment or artifact.
   wins.
 - Reward in `too_far` states initially tolerated `straight` too much, which made
   "leave the right wall and keep going" locally attractive.
+- Reward in `too_far` states also treated all right turns as equally good, which
+  let `turn_right_hard` pivot back into the corridor instead of letting
+  `turn_right_soft` carry the robot forward across a U-turn mouth.
 - Reward in good states was too action-flat, which made orbiting, jittering, and
   over-correction profitable enough to persist.
 - Hard-turn rewards in otherwise good states also stayed too high for too long,

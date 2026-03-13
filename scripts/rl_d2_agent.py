@@ -91,9 +91,8 @@ class RLWallFollowerD2:
         self.reward_heading_parallel = float(rospy.get_param("~reward_heading_parallel", 0.35))
         self.reward_heading_off = float(rospy.get_param("~reward_heading_off", -0.10))
         self.reward_progress_scale = float(rospy.get_param("~reward_progress_scale", 0.20))
-        self.reward_too_far_preferred_turn = float(
-            rospy.get_param("~reward_too_far_preferred_turn", 0.80)
-        )
+        self.reward_too_far_soft_right = float(rospy.get_param("~reward_too_far_soft_right", 0.85))
+        self.reward_too_far_hard_right = float(rospy.get_param("~reward_too_far_hard_right", -0.15))
         self.reward_too_far_wrong_turn = float(rospy.get_param("~reward_too_far_wrong_turn", -0.45))
         self.reward_too_far_straight_toward = float(
             rospy.get_param("~reward_too_far_straight_toward", -0.05)
@@ -688,8 +687,10 @@ class RLWallFollowerD2:
                     reward += self.reward_good_wrong_turn
 
         if state.front_bin == "clear" and state.right_bin == "too_far":
-            if turn_direction == "right":
-                reward += self.reward_too_far_preferred_turn
+            if action_name == "turn_right_soft":
+                reward += self.reward_too_far_soft_right
+            elif action_name == "turn_right_hard":
+                reward += self.reward_too_far_hard_right
             elif turn_direction == "left":
                 reward += self.reward_too_far_wrong_turn
             elif state.front_right_open_bin == "open":
