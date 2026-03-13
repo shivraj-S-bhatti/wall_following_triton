@@ -1,0 +1,50 @@
+named_test_poses:
+  south_corridor_entry:
+    x: 1.286
+    y: 1.052
+    z: 0.00
+    yaw: 0.022
+    use_for_training: true
+    description: Stable lower-middle corridor seed near a right wall.
+  lower_turn_probe:
+    x: 1.460
+    y: -1.223
+    z: 0.00
+    yaw: 0.079
+    use_for_training: true
+    description: Good lower bend probe for turn commitment checks.
+  mid_right_corridor:
+    x: 2.350
+    y: 0.650
+    z: 0.00
+    yaw: -1.570
+    use_for_training: true
+    description: Mid-right corridor seed that helps expose I-beam style transitions.
+  lower_right_u_turn:
+    x: 3.343
+    y: -2.177
+    z: 0.00
+    yaw: -1.981
+    use_for_training: true
+    description: Lower-right U-turn / dead-end probe.
+  upper_right_u_turn:
+    x: 3.157
+    y: 3.185
+    z: 0.00
+    yaw: -1.425
+    use_for_training: true
+    description: Upper-right U-turn probe.
+  west_mid_reacquire:
+    x: -2.850
+    y: 0.780
+    z: 0.00
+    yaw: 0.010
+    use_for_training: true
+    description: Shifted inward from the west wall for safe wall reacquisition tests.
+  west_upper_reacquire:
+    x: -2.350
+    y: 2.950
+    z: 0.00
+    yaw: -1.433
+    use_for_training: true
+    description: Shifted inward upper-west seed for reacquisition and corner entry.

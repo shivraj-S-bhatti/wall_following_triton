@@ -26,6 +26,71 @@ cd ~/catkin_ws/src/wall_following_triton
 ./scripts/d2_state.sh status
 ```
 
+## Pause Training, Capture New Test Coordinates, And Re-Test
+
+Stop the active training launch with `Ctrl-C`. The D2 agent now flushes a final
+`latest` checkpoint on shutdown, so you keep the current in-memory Q-table even
+if you stop mid-episode.
+
+Snapshot the live artifacts before switching tasks:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh save pause_$(date +%Y%m%d_%H%M%S)
+./scripts/d2_state.sh status
+```
+
+Start Gazebo for manual probing:
+
+Terminal 1:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/clean_roslaunch.sh wall_following_triton wf_seed_capture.launch
+```
+
+Terminal 2:
+
+```bash
+source ~/catkin_ws/devel/setup.bash
+rosrun wall_following_triton pose_capture.py
+```
+
+Terminal 3:
+
+```bash
+source ~/catkin_ws/devel/setup.bash
+rosrun wall_following_triton triton_key_teleop.py
+```
+
+Drive Triton to a new pose, press `p` in the pose-capture terminal to print the
+current coordinates, or press `a` to append them into
+`artifacts/captured_start_poses.yaml`.
+
+Then test a learned policy on one of those coordinates:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_qlearning_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml \
+  test_start_enabled:=true test_start_x:=1.460 test_start_y:=-1.223 test_start_yaw:=0.079
+```
+
+Swap `wf_d2_qlearning_test.launch` for `wf_d2_sarsa_test.launch` and the
+artifact path for `artifacts/qtable_d2_sarsa_latest.yaml` if you want to test
+SARSA instead.
+
+You can avoid retyping coordinates by using the named pose catalog:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+python3 scripts/d2_pose_helper.py list
+python3 scripts/d2_pose_helper.py show lower_right_u_turn
+python3 scripts/d2_pose_helper.py cmd lower_right_u_turn --algorithm q_learning --checkpoint-kind latest
+```
+
+Copy the printed command and run it directly.
+
 Discard the current buggy live state safely:
 
 ```bash
@@ -86,6 +151,10 @@ Pose capture keys:
 - `p`: print current pose
 - `a`: append current pose to `artifacts/captured_start_poses.yaml`
 - `q`: quit
+
+After capturing a promising pose, add it to `config/d2_named_test_poses.yaml`
+and, if it is reset-safe, also add it to `start_poses` in `config/d2_params.yaml`
+so future training runs cover that region automatically.
 
 ## Resume Q-Learning Headless
 

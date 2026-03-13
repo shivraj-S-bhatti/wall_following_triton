@@ -97,8 +97,11 @@ random_seed: 603
 start_poses:
   - {x: 1.286, y: 1.052, z: 0.00, yaw: 0.022}
   - {x: 1.460, y: -1.223, z: 0.00, yaw: 0.079}
+  - {x: 2.350, y: 0.650, z: 0.00, yaw: -1.570}
   - {x: 3.343, y: -2.177, z: 0.00, yaw: -1.981}
   - {x: 3.157, y: 3.185, z: 0.00, yaw: -1.425}
+  - {x: -2.850, y: 0.780, z: 0.00, yaw: 0.010}
+  - {x: -2.350, y: 2.950, z: 0.00, yaw: -1.433}
 
 # Fixed evaluation starts. These can be tuned on the VM, but the defaults are
 # stable near-wall starts that span multiple map regions.

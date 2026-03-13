@@ -87,6 +87,8 @@ experiment or artifact.
 - VM backup logic must protect the actual live checkpoint paths, not just metrics.
 - Headless Gazebo helps wall-clock training speed; RViz can be killed once the
   visual sanity check is done.
+- A named pose catalog is worth keeping so we can reproduce edge cases quickly
+  without retyping coordinates or relying on memory.
 
 ## What To Ignore
 

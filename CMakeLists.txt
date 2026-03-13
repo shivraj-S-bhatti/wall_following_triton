@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package()
 
 catkin_install_python(PROGRAMS
+  scripts/d2_pose_helper.py
   scripts/plot_d2_metrics.py
   scripts/pose_capture.py
   scripts/rl_d2_agent.py

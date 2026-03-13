@@ -212,6 +212,7 @@ class RLWallFollowerD2:
             self.run_artifact_dir, os.path.basename(self.eval_csv_path)
         )
         self._prime_run_artifacts()
+        self._shutdown_checkpoint_saved = False
 
         self.latest_scan: Optional[LaserScan] = None
         self.latest_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
@@ -246,6 +247,7 @@ class RLWallFollowerD2:
         self.control_timer = rospy.Timer(
             rospy.Duration(1.0 / max(self.control_hz, 1.0)), self._on_control_tick
         )
+        rospy.on_shutdown(self._on_shutdown)
 
         rospy.loginfo("RLWallFollowerD2 started")
         rospy.loginfo("algorithm=%s mode=%s", self.algorithm, self.mode)
@@ -1149,6 +1151,39 @@ class RLWallFollowerD2:
 
     def _publish_stop(self):
         self.cmd_pub.publish(Twist())
+
+    def _on_shutdown(self):
+        if self._shutdown_checkpoint_saved:
+            return
+        self._shutdown_checkpoint_saved = True
+
+        try:
+            self._publish_stop()
+        except Exception:  # pragma: no cover - ROS shutdown only
+            pass
+
+        if self.mode != "train":
+            return
+
+        try:
+            self._save_q_table(
+                self.latest_qtable_output_path,
+                checkpoint_kind="latest",
+                completed_episodes=self.episode_idx,
+            )
+            if self.run_latest_qtable_output_path != self.latest_qtable_output_path:
+                self._save_q_table(
+                    self.run_latest_qtable_output_path,
+                    checkpoint_kind="latest",
+                    completed_episodes=self.episode_idx,
+                )
+            rospy.loginfo(
+                "Saved shutdown checkpoint at episode %d to %s",
+                self.episode_idx,
+                self.latest_qtable_output_path,
+            )
+        except Exception as exc:  # pragma: no cover - ROS shutdown only
+            rospy.logwarn("Failed to save shutdown checkpoint: %s", exc)
 
     @staticmethod
     def _all_state_keys() -> List[str]:
