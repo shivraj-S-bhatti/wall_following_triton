@@ -9,15 +9,33 @@ import yaml
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-POSES_PATH = os.path.join(ROOT, "config", "d2_named_test_poses.yaml")
+CONFIG_POSES_PATH = os.path.join(ROOT, "config", "d2_named_test_poses.yaml")
+ARTIFACT_POSES_PATH = os.path.join(ROOT, "artifacts", "captured_named_poses.yaml")
 
 
 def load_pose_catalog():
-    with open(POSES_PATH, "r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle) or {}
-    poses = data.get("named_test_poses", {})
-    if not isinstance(poses, dict) or not poses:
-        raise ValueError("named_test_poses missing or empty")
+    poses = {}
+    if os.path.exists(CONFIG_POSES_PATH):
+        with open(CONFIG_POSES_PATH, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        config_poses = data.get("named_test_poses", {})
+        if isinstance(config_poses, dict):
+            poses.update(config_poses)
+
+    if os.path.exists(ARTIFACT_POSES_PATH):
+        with open(ARTIFACT_POSES_PATH, "r", encoding="utf-8") as handle:
+            data = yaml.safe_load(handle) or {}
+        captured_poses = data.get("captured_named_poses", {})
+        if isinstance(captured_poses, dict):
+            for name, pose in captured_poses.items():
+                if isinstance(pose, dict):
+                    merged_pose = dict(pose)
+                    merged_pose.setdefault("description", "captured manually")
+                    merged_pose.setdefault("use_for_training", False)
+                    poses[name] = merged_pose
+
+    if not poses:
+        raise ValueError("No named poses found in config or artifacts")
     return poses
 
 

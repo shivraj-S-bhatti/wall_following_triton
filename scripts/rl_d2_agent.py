@@ -211,7 +211,8 @@ class RLWallFollowerD2:
         self.run_eval_csv_path = os.path.join(
             self.run_artifact_dir, os.path.basename(self.eval_csv_path)
         )
-        self._prime_run_artifacts()
+        if self.mode == "train":
+            self._prime_run_artifacts()
         self._shutdown_checkpoint_saved = False
 
         self.latest_scan: Optional[LaserScan] = None
@@ -269,7 +270,8 @@ class RLWallFollowerD2:
                 self.loaded_qtable_metadata.get("source_qtable_path", "-"),
             )
             rospy.loginfo(
-                "test mode: qtable outputs are read-only (best=%s latest=%s eval_csv=%s)",
+                "test mode: qtable outputs are read-only and no run artifacts will be created "
+                "(best=%s latest=%s eval_csv=%s)",
                 self.qtable_output_path,
                 self.latest_qtable_output_path,
                 self.eval_csv_path,

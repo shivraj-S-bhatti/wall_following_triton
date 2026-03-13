@@ -143,6 +143,7 @@ save_current_into() {
   mkdir -p "${dest}/artifacts" "${dest}/config"
 
   copy_if_exists "${ARTIFACTS_DIR}/captured_start_poses.yaml" "${dest}/artifacts"
+  copy_if_exists "${ARTIFACTS_DIR}/captured_named_poses.yaml" "${dest}/artifacts"
 
   for algo in q_learning sarsa; do
     copy_if_exists "$(artifact_latest_path "${algo}")" "${dest}/artifacts"
@@ -161,6 +162,7 @@ archive_current_state() {
   mkdir -p "${dest}/artifacts" "${dest}/config"
 
   [[ -f "${ARTIFACTS_DIR}/captured_start_poses.yaml" ]] && cp -f "${ARTIFACTS_DIR}/captured_start_poses.yaml" "${dest}/artifacts/"
+  [[ -f "${ARTIFACTS_DIR}/captured_named_poses.yaml" ]] && cp -f "${ARTIFACTS_DIR}/captured_named_poses.yaml" "${dest}/artifacts/"
 
   for algo in q_learning sarsa; do
     move_if_exists "$(artifact_latest_path "${algo}")" "${dest}/artifacts"
@@ -214,6 +216,9 @@ load_checkpoint() {
 
   if [[ -f "${src}/artifacts/captured_start_poses.yaml" ]]; then
     cp -f "${src}/artifacts/captured_start_poses.yaml" "${ARTIFACTS_DIR}/captured_start_poses.yaml"
+  fi
+  if [[ -f "${src}/artifacts/captured_named_poses.yaml" ]]; then
+    cp -f "${src}/artifacts/captured_named_poses.yaml" "${ARTIFACTS_DIR}/captured_named_poses.yaml"
   fi
 
   echo "Loaded checkpoint: ${src}"

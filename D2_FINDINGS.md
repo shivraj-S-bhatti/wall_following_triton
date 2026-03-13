@@ -89,6 +89,8 @@ experiment or artifact.
   visual sanity check is done.
 - A named pose catalog is worth keeping so we can reproduce edge cases quickly
   without retyping coordinates or relying on memory.
+- Manual teleop, pose capture, and test-mode probing should be read-only with
+  respect to RL checkpoints and metrics.
 
 ## What To Ignore
 

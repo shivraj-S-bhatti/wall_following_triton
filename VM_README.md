@@ -65,7 +65,9 @@ rosrun wall_following_triton triton_key_teleop.py
 
 Drive Triton to a new pose, press `p` in the pose-capture terminal to print the
 current coordinates, or press `a` to append them into
-`artifacts/captured_start_poses.yaml`.
+`artifacts/captured_start_poses.yaml`. Press `n` to save the current pose under
+a name you type in the terminal, for example `i_beam_facing_north`; named poses
+are written to `artifacts/captured_named_poses.yaml`.
 
 Then test a learned policy on one of those coordinates:
 
@@ -90,6 +92,9 @@ python3 scripts/d2_pose_helper.py cmd lower_right_u_turn --algorithm q_learning 
 ```
 
 Copy the printed command and run it directly.
+
+Teleop and pose capture do not write or mutate RL checkpoints, metrics, or
+learned tables. Test-mode launches are also read-only with respect to RL state.
 
 Discard the current buggy live state safely:
 
@@ -150,6 +155,7 @@ Pose capture keys:
 
 - `p`: print current pose
 - `a`: append current pose to `artifacts/captured_start_poses.yaml`
+- `n`: prompt for a pose name and save it to `artifacts/captured_named_poses.yaml`
 - `q`: quit
 
 After capturing a promising pose, add it to `config/d2_named_test_poses.yaml`

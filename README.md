@@ -161,6 +161,7 @@ roslaunch wall_following_triton wf_d2_sarsa_test.launch \
 The repo now includes a named pose catalog in:
 
 - `config/d2_named_test_poses.yaml`
+- `artifacts/captured_named_poses.yaml`
 
 Use the helper script to list poses, inspect one, or print a ready-to-run test
 command:
@@ -178,6 +179,10 @@ The current catalog includes safe manually validated poses for:
 - a mid-right corridor / I-beam style probe
 - lower corridor turn probing
 - two shifted-inward west-side reacquisition starts
+
+The helper reads both tracked config poses and any manually captured named poses
+from `artifacts/captured_named_poses.yaml`, so ad hoc pose captures become
+available immediately without editing tracked files.
 
 These named poses are also reflected in the D2 training seed set in
 `config/d2_params.yaml`, so future training runs see broader map coverage than
