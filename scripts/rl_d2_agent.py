@@ -70,7 +70,7 @@ class RLWallFollowerD2:
         self.epsilon_decay = float(rospy.get_param("~epsilon_decay", 0.994))
 
         self.control_hz = float(rospy.get_param("~control_hz", 6.0))
-        self.max_episodes = int(rospy.get_param("~max_episodes", 420))
+        self.max_episodes = int(rospy.get_param("~max_episodes", 360))
         self.max_steps_per_episode = int(rospy.get_param("~max_steps_per_episode", 240))
         self.training_done_stop = bool(rospy.get_param("~training_done_stop", True))
         self.checkpoint_every_episodes = max(0, int(rospy.get_param("~checkpoint_every_episodes", 1)))
@@ -79,7 +79,7 @@ class RLWallFollowerD2:
         self.reset_retry_attempts = max(1, int(rospy.get_param("~reset_retry_attempts", 3)))
 
         self.eval_every_episodes = max(0, int(rospy.get_param("~eval_every_episodes", 20)))
-        self.eval_max_steps_per_start = max(1, int(rospy.get_param("~eval_max_steps_per_start", 100)))
+        self.eval_max_steps_per_start = max(1, int(rospy.get_param("~eval_max_steps_per_start", 80)))
         self.eval_failure_penalty = float(rospy.get_param("~eval_failure_penalty", -25.0))
         self.eval_success_hold_steps = max(1, int(rospy.get_param("~eval_success_hold_steps", 12)))
 

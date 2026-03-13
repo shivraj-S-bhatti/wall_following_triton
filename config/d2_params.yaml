@@ -12,9 +12,9 @@ epsilon_decay: 0.994
 # Control frequency (Hz). One timer tick corresponds to one RL step.
 control_hz: 6.0
 
-# Training budget tuned for a single overnight run with more resets and fewer
-# long bad trajectories.
-max_episodes: 420
+# Training budget tuned to stay comfortably under 5 wall-clock hours on the VM
+# in headless mode, including periodic greedy evaluations.
+max_episodes: 360
 max_steps_per_episode: 240
 training_done_stop: true
 checkpoint_every_episodes: 1
@@ -24,7 +24,7 @@ reset_retry_attempts: 3
 
 # Fixed greedy evaluation of checkpoints.
 eval_every_episodes: 20
-eval_max_steps_per_start: 100
+eval_max_steps_per_start: 80
 eval_failure_penalty: -25.0
 eval_success_hold_steps: 12
 
