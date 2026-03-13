@@ -36,6 +36,10 @@ reward_right_too_far: -0.80
 reward_heading_parallel: 0.35
 reward_heading_off: -0.10
 reward_progress_scale: 0.20
+reward_too_far_preferred_turn: 0.35
+reward_too_far_wrong_turn: -0.25
+reward_too_far_straight_toward: 0.20
+reward_too_far_straight_other: -0.10
 reward_blocked_preferred_turn: 0.90
 reward_blocked_wrong_turn: -1.10
 reward_blocked_straight: -1.40

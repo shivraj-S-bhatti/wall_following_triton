@@ -90,6 +90,16 @@ class RLWallFollowerD2:
         self.reward_heading_parallel = float(rospy.get_param("~reward_heading_parallel", 0.35))
         self.reward_heading_off = float(rospy.get_param("~reward_heading_off", -0.10))
         self.reward_progress_scale = float(rospy.get_param("~reward_progress_scale", 0.20))
+        self.reward_too_far_preferred_turn = float(
+            rospy.get_param("~reward_too_far_preferred_turn", 0.35)
+        )
+        self.reward_too_far_wrong_turn = float(rospy.get_param("~reward_too_far_wrong_turn", -0.25))
+        self.reward_too_far_straight_toward = float(
+            rospy.get_param("~reward_too_far_straight_toward", 0.20)
+        )
+        self.reward_too_far_straight_other = float(
+            rospy.get_param("~reward_too_far_straight_other", -0.10)
+        )
         self.reward_blocked_preferred_turn = float(
             rospy.get_param("~reward_blocked_preferred_turn", 0.90)
         )
@@ -519,6 +529,7 @@ class RLWallFollowerD2:
         reward = self._compute_reward(current_state, self.prev_action)
         termination_reason = self._termination_reason(current_state)
         done = termination_reason is not None
+        previous_action = self.prev_action
 
         if termination_reason in {"collision", "flipped"}:
             reward += self.collision_penalty
@@ -552,12 +563,13 @@ class RLWallFollowerD2:
 
         rospy.loginfo_throttle(
             1.0,
-            "[train] ep=%d step=%d state=%s action=%s reward=%.3f eps=%.3f",
+            "[train] ep=%d step=%d state=%s reward_from=%s reward=%.3f next_action=%s eps=%.3f",
             self.episode_idx,
             self.episode_step,
             current_key,
-            next_action,
+            previous_action,
             reward,
+            next_action,
             self.epsilon,
         )
 
@@ -593,6 +605,7 @@ class RLWallFollowerD2:
 
     def _compute_reward(self, state: D2EncodedState, action_name: str) -> float:
         reward = 0.0
+        turn_direction = self._action_turn_direction(action_name)
 
         reward += self.reward_front_blocked if state.front_bin == "blocked" else self.reward_front_clear
 
@@ -610,9 +623,18 @@ class RLWallFollowerD2:
 
         reward += self.reward_progress_scale * self._action_progress_speed(action_name)
 
+        if state.front_bin == "clear" and state.right_bin == "too_far":
+            if turn_direction == "right":
+                reward += self.reward_too_far_preferred_turn
+            elif turn_direction == "left":
+                reward += self.reward_too_far_wrong_turn
+            elif state.heading_bin == "toward_wall":
+                reward += self.reward_too_far_straight_toward
+            else:
+                reward += self.reward_too_far_straight_other
+
         if state.front_bin == "blocked":
             preferred_turn = self._preferred_blocked_turn(state)
-            turn_direction = self._action_turn_direction(action_name)
             if turn_direction == preferred_turn:
                 reward += self.reward_blocked_preferred_turn
             elif turn_direction == "straight":
@@ -623,11 +645,12 @@ class RLWallFollowerD2:
         return reward
 
     def _preferred_blocked_turn(self, state: D2EncodedState) -> str:
-        if state.front_right_open_bin == "open":
+        # For right-wall following, a blocked front should usually turn left
+        # unless the right wall has actually disappeared and a right opening is
+        # the clear reacquisition path.
+        if state.front_right_open_bin == "open" and state.right_bin == "too_far":
             return "right"
-        if state.front_left_open_bin == "open":
-            return "left"
-        return "left" if state.right_bin != "too_far" else "right"
+        return "left"
 
     def _action_progress_speed(self, action_name: str) -> float:
         cfg = self.actions[action_name]
