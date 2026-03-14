@@ -1,127 +1,880 @@
-# Manual Q-values for Deliverable 1 straight-wall following.
-# State key format: front_bin|right_bin|heading_bin
-
 metadata:
-  wall_side: right
-  desired_wall_distance_m: 0.75
-  front_too_close_m: 0.55
-  right_too_close_m: 0.55
-  right_too_far_m: 0.95
-  heading_parallel_tolerance_m: 0.10
-
+  algorithm: sarsa
+  alpha: 0.15
+  best_eval_score: 757.122
+  checkpoint_kind: latest
+  completed_episodes: 560
+  epsilon: 0.03
+  gamma: 0.95
+  last_saved_at_utc: '2026-03-14T01:17:43Z'
+  mode: train
+  random_seed: 603
+  run_finished_at_utc: '2026-03-14T01:00:34Z'
+  run_id: '20260313_072411'
+  run_started_at_utc: '2026-03-13T07:24:11Z'
+  source_qtable_path: /home/apple/catkin_ws/src/wall_following_triton/artifacts/qtable_d2_sarsa_latest.yaml
 states:
-  # Front blocked: always prioritize a strong left recovery.
-  "too_close|too_close|toward_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|too_close|parallel":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|too_close|away_from_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|good|toward_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|good|parallel":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|good|away_from_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|too_far|toward_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|too_far|parallel":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-  "too_close|too_far|away_from_wall":
-    turn_left_hard: 10.0
-    turn_left_soft: 8.0
-    straight: -5.0
-    turn_right_soft: -8.0
-    turn_right_hard: -10.0
-
-  # Front clear and right wall too close: drift left.
-  "safe|too_close|toward_wall":
-    turn_left_hard: 9.0
-    turn_left_soft: 8.0
-    straight: -1.0
-    turn_right_soft: -7.0
-    turn_right_hard: -9.0
-  "safe|too_close|parallel":
-    turn_left_hard: 7.0
-    turn_left_soft: 9.0
+  blocked|good|away_from_wall|closed|closed:
     straight: 0.0
-    turn_right_soft: -6.0
-    turn_right_hard: -8.0
-  "safe|too_close|away_from_wall":
-    turn_left_hard: 6.0
-    turn_left_soft: 8.0
-    straight: 1.0
-    turn_right_soft: -4.0
-    turn_right_hard: -6.0
-
-  # Good wall distance: maintain parallel motion.
-  "safe|good|toward_wall":
-    turn_left_hard: 2.0
-    turn_left_soft: 9.0
-    straight: 4.0
-    turn_right_soft: -2.0
-    turn_right_hard: -5.0
-  "safe|good|parallel":
-    turn_left_hard: -2.0
-    turn_left_soft: 2.0
-    straight: 10.0
-    turn_right_soft: 2.0
-    turn_right_hard: -2.0
-  "safe|good|away_from_wall":
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|away_from_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|away_from_wall|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|away_from_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|parallel|closed|closed:
+    straight: 0.7293744722832863
+    turn_left_hard: 11.339166701630628
+    turn_left_soft: 6.1525178215460965
+    turn_right_hard: 5.23622345289751
+    turn_right_soft: 1.1688003093901362
+  blocked|good|parallel|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|parallel|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|parallel|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|toward_wall|closed|closed:
+    straight: 4.66157690498456
+    turn_left_hard: 16.62689499694012
+    turn_left_soft: 4.79484030243535
+    turn_right_hard: 2.8651266467206655
+    turn_right_soft: 5.06018767422573
+  blocked|good|toward_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|good|toward_wall|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 4.764658210737295
+    turn_right_hard: -0.17786349048551175
+    turn_right_soft: -0.507
+  blocked|good|toward_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|away_from_wall|closed|closed:
+    straight: -1.0917358312499998
+    turn_left_hard: -0.5686369274607621
+    turn_left_soft: -0.596992070527528
+    turn_right_hard: -0.6763296888475119
+    turn_right_soft: -0.6277130643693701
+  blocked|too_close|away_from_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|away_from_wall|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|away_from_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|parallel|closed|closed:
+    straight: -1.1173296950304112
+    turn_left_hard: 2.996459138010982
+    turn_left_soft: 9.89007360372899
+    turn_right_hard: -2.9147384440150903
+    turn_right_soft: -2.7328895076007456
+  blocked|too_close|parallel|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|parallel|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|parallel|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|toward_wall|closed|closed:
+    straight: -2.958529425797295
+    turn_left_hard: 12.975392046395807
+    turn_left_soft: -2.2452051278622087
+    turn_right_hard: -3.867147355740122
+    turn_right_soft: 0.05265583467106527
+  blocked|too_close|toward_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_close|toward_wall|open|closed:
+    straight: 0.5733589849426142
+    turn_left_hard: 7.1187964570322135
+    turn_left_soft: -0.5847770353238927
+    turn_right_hard: -1.7005418387452138
+    turn_right_soft: -2.040421539145998
+  blocked|too_close|toward_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|away_from_wall|closed|closed:
+    straight: -0.37047184245425774
+    turn_left_hard: -0.21000000000000005
+    turn_left_soft: -0.38295000000000007
+    turn_right_hard: 0.43713354764418283
+    turn_right_soft: -0.507
+  blocked|too_far|away_from_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 3.663043979373584
+  blocked|too_far|away_from_wall|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: -0.44936724675870865
+    turn_right_soft: -0.9337875
+  blocked|too_far|away_from_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|parallel|closed|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: -0.4781055096162674
+  blocked|too_far|parallel|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|parallel|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|parallel|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|toward_wall|closed|closed:
+    straight: 2.491773811404224
+    turn_left_hard: 11.553035399289053
+    turn_left_soft: -0.7663588731348575
+    turn_right_hard: -1.0865824474277939
+    turn_right_soft: -0.883119778312854
+  blocked|too_far|toward_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  blocked|too_far|toward_wall|open|closed:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: -0.43788849048551176
+  blocked|too_far|toward_wall|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  clear|good|away_from_wall|closed|closed:
+    straight: 21.32525875929392
+    turn_left_hard: 20.7255240691524
+    turn_left_soft: 21.600206066583294
+    turn_right_hard: 24.520052162424108
+    turn_right_soft: 21.44738447028124
+  clear|good|away_from_wall|closed|open:
+    straight: 21.76310792843024
+    turn_left_hard: 21.888247416750342
+    turn_left_soft: 21.205542339343303
+    turn_right_hard: 22.289121367666244
+    turn_right_soft: 24.161548543153206
+  clear|good|away_from_wall|open|closed:
+    straight: 22.32466681628302
+    turn_left_hard: 23.706264277598812
+    turn_left_soft: 23.5026676181361
+    turn_right_hard: 23.670244334104748
+    turn_right_soft: 27.141646017211443
+  clear|good|away_from_wall|open|open:
+    straight: 17.17322524282981
+    turn_left_hard: 17.0803123792494
+    turn_left_soft: 17.493675925919362
+    turn_right_hard: 16.644505159733374
+    turn_right_soft: 18.771796188712184
+  clear|good|parallel|closed|closed:
+    straight: 27.652500233585048
+    turn_left_hard: 24.915288102504878
+    turn_left_soft: 24.236457254800982
+    turn_right_hard: 23.602659737976456
+    turn_right_soft: 24.27962110477311
+  clear|good|parallel|closed|open:
+    straight: 10.032551999431876
+    turn_left_hard: 6.072538157441878
+    turn_left_soft: 4.531087439019579
+    turn_right_hard: 23.946850926986542
+    turn_right_soft: 0.2505
+  clear|good|parallel|open|closed:
+    straight: 25.02893865910175
+    turn_left_hard: 22.35684975987
+    turn_left_soft: 21.7664734236039
+    turn_right_hard: 20.187219500666398
+    turn_right_soft: 22.754497569214355
+  clear|good|parallel|open|open:
+    straight: 18.975528473567376
+    turn_left_hard: 21.65381279893308
+    turn_left_soft: 17.911837326978873
+    turn_right_hard: 18.9602105460997
+    turn_right_soft: 16.642594974570738
+  clear|good|toward_wall|closed|closed:
+    straight: 20.45516923137404
+    turn_left_hard: 20.70790254071383
+    turn_left_soft: 21.367239813441703
+    turn_right_hard: 20.35824485074339
+    turn_right_soft: 25.06984409956206
+  clear|good|toward_wall|closed|open:
+    straight: 19.816918003285046
+    turn_left_hard: 1.0136382418821714
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  clear|good|toward_wall|open|closed:
+    straight: 18.334872398327096
+    turn_left_hard: 23.128341462402854
+    turn_left_soft: 16.653095766588475
+    turn_right_hard: 16.72842122751497
+    turn_right_soft: 18.091756678381678
+  clear|good|toward_wall|open|open:
+    straight: 13.207087734929011
+    turn_left_hard: 12.54221927831221
+    turn_left_soft: 12.6219586114205
+    turn_right_hard: 12.498661549592377
+    turn_right_soft: 12.551174832279655
+  clear|too_close|away_from_wall|closed|closed:
+    straight: 0.1319087170184824
+    turn_left_hard: 22.159881669446925
+    turn_left_soft: 2.3319540297855483
+    turn_right_hard: -1.2554484888428241
+    turn_right_soft: 3.821801272989121
+  clear|too_close|away_from_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 13.159460749341953
+  clear|too_close|away_from_wall|open|closed:
+    straight: 16.95871772969358
+    turn_left_hard: 15.872543159638283
+    turn_left_soft: 17.109637196225737
+    turn_right_hard: 20.59983969322714
+    turn_right_soft: 17.057332766567484
+  clear|too_close|away_from_wall|open|open:
+    straight: 8.773323667797316
+    turn_left_hard: 3.0346869833755843
+    turn_left_soft: 15.743318316775797
+    turn_right_hard: 8.029944904674343
+    turn_right_soft: 9.694857920422539
+  clear|too_close|parallel|closed|closed:
+    straight: 3.7230239231382196
+    turn_left_hard: -0.20372989205811587
+    turn_left_soft: 1.8514782755268087
+    turn_right_hard: 15.627624307172184
+    turn_right_soft: 4.526831685197683
+  clear|too_close|parallel|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  clear|too_close|parallel|open|closed:
+    straight: 21.523961720924646
+    turn_left_hard: 16.79988645921566
+    turn_left_soft: 16.886296751566174
+    turn_right_hard: 16.67075733836886
+    turn_right_soft: 16.092207471996225
+  clear|too_close|parallel|open|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 6.724387891637516
+  clear|too_close|toward_wall|closed|closed:
+    straight: 5.872404546392254
+    turn_left_hard: 14.362957526239393
+    turn_left_soft: 7.9902367454839585
+    turn_right_hard: 9.911071675065962
+    turn_right_soft: 5.572651878658876
+  clear|too_close|toward_wall|closed|open:
+    straight: 0.0
+    turn_left_hard: 0.0
+    turn_left_soft: 0.0
+    turn_right_hard: 0.0
+    turn_right_soft: 0.0
+  clear|too_close|toward_wall|open|closed:
+    straight: 10.78111923637028
+    turn_left_hard: 12.8868499288828
+    turn_left_soft: 11.750705129061986
+    turn_right_hard: 9.369411534808949
+    turn_right_soft: 12.276729040446975
+  clear|too_close|toward_wall|open|open:
+    straight: 9.021317475526976
+    turn_left_hard: 10.225627979080839
+    turn_left_soft: 11.707533451656813
+    turn_right_hard: 9.812527730677052
+    turn_right_soft: 10.091673546396299
+  clear|too_far|away_from_wall|closed|closed:
+    straight: 0.37358730808829976
+    turn_left_hard: 3.6656857451298377
+    turn_left_soft: 3.7985996614626383
+    turn_right_hard: 2.257653296781376
+    turn_right_soft: 16.70648475003992
+  clear|too_far|away_from_wall|closed|open:
+    straight: 3.0818541994666147
+    turn_left_hard: 4.8570464954730594
+    turn_left_soft: 5.52848012583535
+    turn_right_hard: 18.625326970794244
+    turn_right_soft: 6.253464913582718
+  clear|too_far|away_from_wall|open|closed:
+    straight: 3.339963785048877
+    turn_left_hard: 0.001500694234484201
+    turn_left_soft: 5.601470946520838
+    turn_right_hard: 0.5736172471999005
+    turn_right_soft: 15.203383192049673
+  clear|too_far|away_from_wall|open|open:
+    straight: 8.796892396835396
+    turn_left_hard: 9.807951193564108
+    turn_left_soft: 10.944535397811007
+    turn_right_hard: 10.290654734794542
+    turn_right_soft: 12.097160218530616
+  clear|too_far|parallel|closed|closed:
+    straight: 16.02753872113894
+    turn_left_hard: 18.02822155741317
+    turn_left_soft: 17.0194835909856
+    turn_right_hard: 22.869093304759915
+    turn_right_soft: 7.104381826921745
+  clear|too_far|parallel|closed|open:
+    straight: 1.5199808375844908
+    turn_left_hard: 0.637974333572196
+    turn_left_soft: 4.051957191579654
+    turn_right_hard: 5.187549326624996
+    turn_right_soft: 21.202517609827254
+  clear|too_far|parallel|open|closed:
+    straight: 11.092394435033958
+    turn_left_hard: 4.937037513892247
+    turn_left_soft: 2.5140620856069322
+    turn_right_hard: 10.004302674666903
+    turn_right_soft: 16.900502792526748
+  clear|too_far|parallel|open|open:
+    straight: 2.5896171988918835
+    turn_left_hard: 6.850524580676369
+    turn_left_soft: 1.256893580265005
+    turn_right_hard: 14.534314373246456
+    turn_right_soft: 1.8876944915803309
+  clear|too_far|toward_wall|closed|closed:
+    straight: 10.333106740589997
+    turn_left_hard: 11.744683624897872
+    turn_left_soft: 4.443446687575061
+    turn_right_hard: 5.80721422422802
+    turn_right_soft: 17.411086161110397
+  clear|too_far|toward_wall|closed|open:
+    straight: 3.5972343881908335
+    turn_left_hard: 0.46029286039422007
+    turn_left_soft: 2.815977934750583
+    turn_right_hard: 12.046290337586507
+    turn_right_soft: 2.3007694307117146
+  clear|too_far|toward_wall|open|closed:
+    straight: 11.70787051959758
+    turn_left_hard: 5.532942688469943
+    turn_left_soft: 11.193555419549162
+    turn_right_hard: 10.887346499267275
+    turn_right_soft: 18.97353206057207
+  clear|too_far|toward_wall|open|open:
+    straight: 10.432607299408188
+    turn_left_hard: 5.65937565415704
+    turn_left_soft: 8.532805008330376
+    turn_right_hard: 10.554311457088401
+    turn_right_soft: 12.535903563052072
+  safe|good|away_from_wall|closed|closed:
+    straight: 3.0
     turn_left_hard: -5.0
     turn_left_soft: -1.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|good|away_from_wall|closed|open:
     straight: 3.0
-    turn_right_soft: 9.0
-    turn_right_hard: 6.0
-
-  # Right wall too far: steer right to reacquire target distance.
-  "safe|too_far|toward_wall":
-    turn_left_hard: -4.0
+    turn_left_hard: -5.0
     turn_left_soft: -1.0
-    straight: 2.0
-    turn_right_soft: 8.0
-    turn_right_hard: 5.0
-  "safe|too_far|parallel":
-    turn_left_hard: -6.0
-    turn_left_soft: -2.0
-    straight: 1.0
-    turn_right_soft: 9.0
     turn_right_hard: 6.0
-  "safe|too_far|away_from_wall":
+    turn_right_soft: 9.0
+  safe|good|away_from_wall|open|closed:
+    straight: 3.0
+    turn_left_hard: -5.0
+    turn_left_soft: -1.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|good|away_from_wall|open|open:
+    straight: 3.0
+    turn_left_hard: -5.0
+    turn_left_soft: -1.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|good|parallel|closed|closed:
+    straight: 10.0
+    turn_left_hard: -2.0
+    turn_left_soft: 2.0
+    turn_right_hard: -2.0
+    turn_right_soft: 2.0
+  safe|good|parallel|closed|open:
+    straight: 10.0
+    turn_left_hard: -2.0
+    turn_left_soft: 2.0
+    turn_right_hard: -2.0
+    turn_right_soft: 2.0
+  safe|good|parallel|open|closed:
+    straight: 10.0
+    turn_left_hard: -2.0
+    turn_left_soft: 2.0
+    turn_right_hard: -2.0
+    turn_right_soft: 2.0
+  safe|good|parallel|open|open:
+    straight: 10.0
+    turn_left_hard: -2.0
+    turn_left_soft: 2.0
+    turn_right_hard: -2.0
+    turn_right_soft: 2.0
+  safe|good|toward_wall|closed|closed:
+    straight: 4.0
+    turn_left_hard: 2.0
+    turn_left_soft: 9.0
+    turn_right_hard: -5.0
+    turn_right_soft: -2.0
+  safe|good|toward_wall|closed|open:
+    straight: 4.0
+    turn_left_hard: 2.0
+    turn_left_soft: 9.0
+    turn_right_hard: -5.0
+    turn_right_soft: -2.0
+  safe|good|toward_wall|open|closed:
+    straight: 4.0
+    turn_left_hard: 2.0
+    turn_left_soft: 9.0
+    turn_right_hard: -5.0
+    turn_right_soft: -2.0
+  safe|good|toward_wall|open|open:
+    straight: 4.0
+    turn_left_hard: 2.0
+    turn_left_soft: 9.0
+    turn_right_hard: -5.0
+    turn_right_soft: -2.0
+  safe|too_close|away_from_wall|closed|closed:
+    straight: 1.0
+    turn_left_hard: 6.0
+    turn_left_soft: 8.0
+    turn_right_hard: -6.0
+    turn_right_soft: -4.0
+  safe|too_close|away_from_wall|closed|open:
+    straight: 1.0
+    turn_left_hard: 6.0
+    turn_left_soft: 8.0
+    turn_right_hard: -6.0
+    turn_right_soft: -4.0
+  safe|too_close|away_from_wall|open|closed:
+    straight: 1.0
+    turn_left_hard: 6.0
+    turn_left_soft: 8.0
+    turn_right_hard: -6.0
+    turn_right_soft: -4.0
+  safe|too_close|away_from_wall|open|open:
+    straight: 1.0
+    turn_left_hard: 6.0
+    turn_left_soft: 8.0
+    turn_right_hard: -6.0
+    turn_right_soft: -4.0
+  safe|too_close|parallel|closed|closed:
+    straight: 0.0
+    turn_left_hard: 7.0
+    turn_left_soft: 9.0
+    turn_right_hard: -8.0
+    turn_right_soft: -6.0
+  safe|too_close|parallel|closed|open:
+    straight: 0.0
+    turn_left_hard: 7.0
+    turn_left_soft: 9.0
+    turn_right_hard: -8.0
+    turn_right_soft: -6.0
+  safe|too_close|parallel|open|closed:
+    straight: 0.0
+    turn_left_hard: 7.0
+    turn_left_soft: 9.0
+    turn_right_hard: -8.0
+    turn_right_soft: -6.0
+  safe|too_close|parallel|open|open:
+    straight: 0.0
+    turn_left_hard: 7.0
+    turn_left_soft: 9.0
+    turn_right_hard: -8.0
+    turn_right_soft: -6.0
+  safe|too_close|toward_wall|closed|closed:
+    straight: -1.0
+    turn_left_hard: 9.0
+    turn_left_soft: 8.0
+    turn_right_hard: -9.0
+    turn_right_soft: -7.0
+  safe|too_close|toward_wall|closed|open:
+    straight: -1.0
+    turn_left_hard: 9.0
+    turn_left_soft: 8.0
+    turn_right_hard: -9.0
+    turn_right_soft: -7.0
+  safe|too_close|toward_wall|open|closed:
+    straight: -1.0
+    turn_left_hard: 9.0
+    turn_left_soft: 8.0
+    turn_right_hard: -9.0
+    turn_right_soft: -7.0
+  safe|too_close|toward_wall|open|open:
+    straight: -1.0
+    turn_left_hard: 9.0
+    turn_left_soft: 8.0
+    turn_right_hard: -9.0
+    turn_right_soft: -7.0
+  safe|too_far|away_from_wall|closed|closed:
+    straight: -1.0
     turn_left_hard: -8.0
     turn_left_soft: -3.0
-    straight: -1.0
-    turn_right_soft: 8.0
     turn_right_hard: 10.0
+    turn_right_soft: 8.0
+  safe|too_far|away_from_wall|closed|open:
+    straight: -1.0
+    turn_left_hard: -8.0
+    turn_left_soft: -3.0
+    turn_right_hard: 10.0
+    turn_right_soft: 8.0
+  safe|too_far|away_from_wall|open|closed:
+    straight: -1.0
+    turn_left_hard: -8.0
+    turn_left_soft: -3.0
+    turn_right_hard: 10.0
+    turn_right_soft: 8.0
+  safe|too_far|away_from_wall|open|open:
+    straight: -1.0
+    turn_left_hard: -8.0
+    turn_left_soft: -3.0
+    turn_right_hard: 10.0
+    turn_right_soft: 8.0
+  safe|too_far|parallel|closed|closed:
+    straight: 1.0
+    turn_left_hard: -6.0
+    turn_left_soft: -2.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|too_far|parallel|closed|open:
+    straight: 1.0
+    turn_left_hard: -6.0
+    turn_left_soft: -2.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|too_far|parallel|open|closed:
+    straight: 1.0
+    turn_left_hard: -6.0
+    turn_left_soft: -2.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|too_far|parallel|open|open:
+    straight: 1.0
+    turn_left_hard: -6.0
+    turn_left_soft: -2.0
+    turn_right_hard: 6.0
+    turn_right_soft: 9.0
+  safe|too_far|toward_wall|closed|closed:
+    straight: 2.0
+    turn_left_hard: -4.0
+    turn_left_soft: -1.0
+    turn_right_hard: 5.0
+    turn_right_soft: 8.0
+  safe|too_far|toward_wall|closed|open:
+    straight: 2.0
+    turn_left_hard: -4.0
+    turn_left_soft: -1.0
+    turn_right_hard: 5.0
+    turn_right_soft: 8.0
+  safe|too_far|toward_wall|open|closed:
+    straight: 2.0
+    turn_left_hard: -4.0
+    turn_left_soft: -1.0
+    turn_right_hard: 5.0
+    turn_right_soft: 8.0
+  safe|too_far|toward_wall|open|open:
+    straight: 2.0
+    turn_left_hard: -4.0
+    turn_left_soft: -1.0
+    turn_right_hard: 5.0
+    turn_right_soft: 8.0
+  too_close|good|away_from_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|away_from_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|away_from_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|away_from_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|parallel|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|parallel|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|parallel|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|parallel|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|toward_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|toward_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|toward_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|good|toward_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|away_from_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|away_from_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|away_from_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|away_from_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|parallel|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|parallel|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|parallel|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|parallel|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|toward_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|toward_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|toward_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_close|toward_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|away_from_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|away_from_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|away_from_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|away_from_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|parallel|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|parallel|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|parallel|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|parallel|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|toward_wall|closed|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|toward_wall|closed|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|toward_wall|open|closed:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
+  too_close|too_far|toward_wall|open|open:
+    straight: -5.0
+    turn_left_hard: 10.0
+    turn_left_soft: 8.0
+    turn_right_hard: -10.0
+    turn_right_soft: -8.0
