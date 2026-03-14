@@ -10,6 +10,7 @@
   <arg name="test_start_y" default="0.0"/>
   <arg name="test_start_yaw" default="0.0"/>
   <arg name="test_start_z" default="0.0"/>
+  <arg name="test_deadlock_breaker_enabled" default="false"/>
 
   <include file="$(find wall_following_triton)/launch/wf_d2.launch">
     <arg name="algorithm" value="sarsa"/>
@@ -25,5 +26,6 @@
     <arg name="test_start_y" value="$(arg test_start_y)"/>
     <arg name="test_start_yaw" value="$(arg test_start_yaw)"/>
     <arg name="test_start_z" value="$(arg test_start_z)"/>
+    <arg name="test_deadlock_breaker_enabled" value="$(arg test_deadlock_breaker_enabled)"/>
   </include>
 </launch>

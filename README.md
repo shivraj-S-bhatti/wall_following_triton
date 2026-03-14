@@ -141,6 +141,11 @@ This script:
   - `test_start_y:=...`
   - `test_start_yaw:=...`
   - optional `test_start_z:=...`
+- Manual test starts now wait for the `triton` model to appear before teleporting,
+  so named-pose tests no longer depend on spawn timing.
+- SARSA test launches also expose an opt-in deadlock breaker:
+  - `test_deadlock_breaker_enabled:=true`
+  - use it only for SARSA demo fallback if the pure greedy test locally sticks
 - The submitted package should include the final chosen greedy tables in:
   - `config/qtable_d2_qlearning_best.yaml`
   - `config/qtable_d2_sarsa_best.yaml`
@@ -179,6 +184,7 @@ The current catalog includes safe manually validated poses for:
 - a mid-right corridor / I-beam style probe
 - lower corridor turn probing
 - two shifted-inward west-side reacquisition starts
+- a standardized recording start for the outer wall (`south_corridor_entry`)
 
 The helper reads both tracked config poses and any manually captured named poses
 from `artifacts/captured_named_poses.yaml`, so ad hoc pose captures become
@@ -236,16 +242,80 @@ ffmpeg -i raw_demo.mp4 -filter:v "setpts=0.25*PTS,scale=960:-2,fps=15" \
   -c:v libx264 -preset veryfast -crf 33 -an demo_fast.mp4
 ```
 
+## Recording Commands
+
+Use the promoted submission tables in `config/`. Record two total videos:
+
+- one Q-learning video that shows both the I-beam and outer-wall starts
+- one SARSA video that shows both the I-beam and outer-wall starts
+
+Q-learning I-beam:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_qlearning_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_qlearning_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
+Q-learning outer wall (`south_corridor_entry`):
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_qlearning_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_qlearning_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=1.286 test_start_y:=1.052 test_start_yaw:=0.022 test_start_z:=0.00
+```
+
+SARSA I-beam:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
+SARSA outer wall (`south_corridor_entry`):
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=1.286 test_start_y:=1.052 test_start_yaw:=0.022 test_start_z:=0.00
+```
+
+If SARSA still locally sticks in test mode, use this demo-only fallback:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_deadlock_breaker_enabled:=true \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
 ## Submission Notes
 
 Deliverable 2 final submission should contain:
 - the ROS package folder
 - the final chosen Q-learning best table in `config/`
 - the final chosen SARSA best table in `config/`
-- one Q-learning demo video
-- one SARSA demo video
-- one reward-vs-episode figure
+- one Q-learning demo video containing both the I-beam and outer-wall clips
+- one SARSA demo video containing both the I-beam and outer-wall clips
+- one reward-vs-episode figure tracked at `submission/d2_reward_vs_episode.png`
 
 Helpful operator docs:
 - `VM_README.md`: VM commands, backups, resume/test commands
 - `D2_GUIDE.md`: step-by-step learning guide
+- `CHECKLIST_D2.md`: final submission checklist and push commands

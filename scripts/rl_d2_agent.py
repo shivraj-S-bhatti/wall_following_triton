@@ -78,7 +78,7 @@ class RLWallFollowerD2:
         self.reset_settle_seconds = float(rospy.get_param("~reset_settle_seconds", 0.20))
         self.reset_retry_attempts = max(1, int(rospy.get_param("~reset_retry_attempts", 3)))
 
-        self.eval_every_episodes = max(0, int(rospy.get_param("~eval_every_episodes", 20)))
+        self.eval_every_episodes = max(0, int(rospy.get_param("~eval_every_episodes", 0)))
         self.eval_max_steps_per_start = max(1, int(rospy.get_param("~eval_max_steps_per_start", 80)))
         self.eval_failure_penalty = float(rospy.get_param("~eval_failure_penalty", -25.0))
         self.eval_success_hold_steps = max(1, int(rospy.get_param("~eval_success_hold_steps", 12)))
@@ -138,6 +138,9 @@ class RLWallFollowerD2:
             "z": float(rospy.get_param("~test_start_z", 0.0)),
             "yaw": float(rospy.get_param("~test_start_yaw", 0.0)),
         }
+        self.test_deadlock_breaker_enabled = bool(
+            rospy.get_param("~test_deadlock_breaker_enabled", False)
+        )
 
         self.actions_path = rospy.get_param("~actions_path")
         self.qtable_input_path = rospy.get_param("~qtable_input_path")
@@ -216,6 +219,7 @@ class RLWallFollowerD2:
 
         self.latest_scan: Optional[LaserScan] = None
         self.latest_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
+        self.robot_model_seen = False
         self.prev_robot_pose: Optional[Tuple[float, float, float, float, float, float]] = None
         self.stationary_steps = 0
 
@@ -277,6 +281,13 @@ class RLWallFollowerD2:
                 self.latest_qtable_output_path,
                 self.eval_csv_path,
             )
+            rospy.loginfo(
+                "test mode flags: acquire_wall_enabled=%s test_start_enabled=%s "
+                "test_deadlock_breaker_enabled=%s",
+                self.acquire_wall_enabled,
+                self.test_start_enabled,
+                self.test_deadlock_breaker_enabled,
+            )
         else:
             rospy.loginfo("qtable_output=%s", self.qtable_output_path)
             rospy.loginfo(
@@ -307,16 +318,47 @@ class RLWallFollowerD2:
         self.reset_world_srv = rospy.ServiceProxy("/gazebo/reset_world", Empty)
 
     def _apply_test_start_pose(self):
+        wait_timeout_hit = False
         try:
+            if not self._wait_for_robot_model():
+                wait_timeout_hit = True
+                rospy.logwarn(
+                    "Manual test start pose not applied; robot model wait timed out "
+                    "(x=%.3f y=%.3f yaw=%.3f wait_timeout_hit=%s)",
+                    self.test_start_pose["x"],
+                    self.test_start_pose["y"],
+                    self.test_start_pose["yaw"],
+                    wait_timeout_hit,
+                )
+                return
             self._reset_robot_pose_safely(self.test_start_pose)
             rospy.loginfo(
-                "Applied manual test start pose x=%.3f y=%.3f yaw=%.3f",
+                "Applied manual test start pose x=%.3f y=%.3f yaw=%.3f wait_timeout_hit=%s",
                 self.test_start_pose["x"],
                 self.test_start_pose["y"],
                 self.test_start_pose["yaw"],
+                wait_timeout_hit,
             )
         except Exception as exc:  # pragma: no cover - ROS runtime only
-            rospy.logwarn("Failed to apply manual test start pose: %s", exc)
+            rospy.logwarn(
+                "Failed to apply manual test start pose x=%.3f y=%.3f yaw=%.3f "
+                "wait_timeout_hit=%s error=%s",
+                self.test_start_pose["x"],
+                self.test_start_pose["y"],
+                self.test_start_pose["yaw"],
+                wait_timeout_hit,
+                exc,
+            )
+
+    def _wait_for_robot_model(self, timeout: float = 10.0) -> bool:
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        while not rospy.is_shutdown():
+            if self.robot_model_seen:
+                return True
+            if rospy.Time.now() >= deadline:
+                return False
+            rospy.sleep(0.05)
+        return False
 
     def _load_actions(self, path: str) -> Dict[str, Dict[str, float]]:
         with open(path, "r", encoding="utf-8") as f:
@@ -505,6 +547,8 @@ class RLWallFollowerD2:
         except ValueError:
             return
 
+        self.robot_model_seen = True
+
         pose = msg.pose[idx]
         position = pose.position
         orientation = pose.orientation
@@ -627,6 +671,8 @@ class RLWallFollowerD2:
         if acquisition_action is not None:
             return acquisition_action
         greedy_action = self._select_greedy_action(state.key)
+        if self.algorithm != "sarsa" or not self.test_deadlock_breaker_enabled:
+            return greedy_action
         return self._select_test_deadlock_breaker(state, greedy_action)
 
     def _select_test_deadlock_breaker(self, state: D2EncodedState, greedy_action: str) -> str:
@@ -636,8 +682,8 @@ class RLWallFollowerD2:
             self.test_last_state_key = state.key
             self.test_same_state_steps = 1
 
-        # Test-only safeguard: if the policy keeps revisiting the same too-close
-        # state, prefer a forward-moving left correction over in-place pivots.
+        # SARSA-only test safeguard: if the policy keeps revisiting the same
+        # too-close state, prefer a forward-moving correction over in-place pivots.
         if (
             state.front_bin == "clear"
             and state.right_bin == "too_close"

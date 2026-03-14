@@ -7,9 +7,9 @@
   <arg name="scan_topic" default="/scan"/>
   <arg name="cmd_topic" default="/cmd_vel"/>
   <arg name="control_hz" default="6.0"/>
-  <arg name="max_episodes" default="420"/>
+  <arg name="max_episodes" default="360"/>
   <arg name="max_steps_per_episode" default="240"/>
-  <arg name="eval_every_episodes" default="20"/>
+  <arg name="eval_every_episodes" default="0"/>
   <arg name="resume_training_state" default="true"/>
   <arg name="acquire_wall_enabled" default="false"/>
   <arg name="actions_path" default="$(find wall_following_triton)/config/actions_d2.yaml"/>
@@ -26,6 +26,7 @@
   <arg name="test_start_y" default="0.0"/>
   <arg name="test_start_yaw" default="0.0"/>
   <arg name="test_start_z" default="0.0"/>
+  <arg name="test_deadlock_breaker_enabled" default="false"/>
 
   <include file="$(find stingray_sim)/launch/wall_following.launch"/>
 
@@ -61,5 +62,6 @@
     <param name="test_start_y" value="$(arg test_start_y)"/>
     <param name="test_start_yaw" value="$(arg test_start_yaw)"/>
     <param name="test_start_z" value="$(arg test_start_z)"/>
+    <param name="test_deadlock_breaker_enabled" value="$(arg test_deadlock_breaker_enabled)"/>
   </node>
 </launch>

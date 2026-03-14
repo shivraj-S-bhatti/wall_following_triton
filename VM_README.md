@@ -162,20 +162,101 @@ After capturing a promising pose, add it to `config/d2_named_test_poses.yaml`
 and, if it is reset-safe, also add it to `start_poses` in `config/d2_params.yaml`
 so future training runs cover that region automatically.
 
+## Submission Recording Commands
+
+Use the promoted submission tables in `config/`. These commands keep Q-learning
+pure and only enable the SARSA deadlock breaker if the pure test still sticks.
+
+Q-learning I-beam (`i_beam_facing_north`):
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_qlearning_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_qlearning_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
+Q-learning outer wall (`south_corridor_entry`):
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_qlearning_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_qlearning_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=1.286 test_start_y:=1.052 test_start_yaw:=0.022 test_start_z:=0.00
+```
+
+SARSA I-beam:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
+SARSA outer wall:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_start_enabled:=true test_start_x:=1.286 test_start_y:=1.052 test_start_yaw:=0.022 test_start_z:=0.00
+```
+
+SARSA fallback only if the pure test still locally sticks:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+source ~/catkin_ws/devel/setup.bash
+./scripts/clean_roslaunch.sh wall_following_triton wf_d2_sarsa_test.launch \
+  qtable_input_path:=$(rospack find wall_following_triton)/config/qtable_d2_sarsa_best.yaml \
+  acquire_wall_enabled:=false \
+  test_deadlock_breaker_enabled:=true \
+  test_start_enabled:=true test_start_x:=0.731 test_start_y:=-2.815 test_start_yaw:=1.232 test_start_z:=0.00
+```
+
+Generate the tracked reward figure for GitHub:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+MPLCONFIGDIR=/tmp/mpl python3 scripts/plot_d2_metrics.py --output submission/d2_reward_vs_episode.png
+```
+
+Push the final tracked files from the VM:
+
+```bash
+cd ~/catkin_ws/src/wall_following_triton
+./scripts/d2_state.sh save pre_submission_$(date +%Y%m%d_%H%M%S)
+git status --short
+git add config/qtable_d2_qlearning_best.yaml \
+        config/qtable_d2_sarsa_best.yaml \
+        submission/d2_reward_vs_episode.png
+git commit -m "Promote final D2 policies and submission figure"
+git push origin codex/d2-converge
+```
+
 ## Resume Q-Learning Headless
 
 Headless mode keeps Gazebo physics running and kills the GUI client after launch.
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_qlearning_latest.yaml max_episodes:=360 max_steps_per_episode:=240 control_hz:=6.0 eval_every_episodes:=0 acquire_wall_enabled:=false
 ```
 
 If no latest checkpoint exists yet, start from D1:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_qlearning_train.launch max_episodes:=360 max_steps_per_episode:=240 control_hz:=6.0 eval_every_episodes:=0 acquire_wall_enabled:=false
 ```
 
 ## Run SARSA Headless
@@ -184,14 +265,14 @@ Fresh SARSA run:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch max_episodes:=360 max_steps_per_episode:=240 control_hz:=6.0 eval_every_episodes:=0 acquire_wall_enabled:=false
 ```
 
 Resume SARSA:
 
 ```bash
 cd ~/catkin_ws/src/wall_following_triton
-./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=420 max_steps_per_episode:=240 control_hz:=6.0 acquire_wall_enabled:=false
+./scripts/clean_roslaunch.sh --headless wall_following_triton wf_d2_sarsa_train.launch qtable_input_path:=$(rospack find wall_following_triton)/artifacts/qtable_d2_sarsa_latest.yaml max_episodes:=360 max_steps_per_episode:=240 control_hz:=6.0 eval_every_episodes:=0 acquire_wall_enabled:=false
 ```
 
 ## Quick Progress Checks
@@ -312,9 +393,10 @@ cd ~/catkin_ws/src/wall_following_triton
 ## Current Practical Defaults
 
 - `control_hz: 6.0`
-- `q_learning max_episodes: 420`
-- `sarsa max_episodes: 420`
+- `q_learning max_episodes: 360`
+- `sarsa max_episodes: 360`
 - `max_steps_per_episode: 240`
+- `eval_every_episodes: 0`
 - live training outputs go to ignored `artifacts/`
 - every run is mirrored to `artifacts/runs/<algorithm>/<run_id>/`
 - tracked `config/*best.yaml` files are only for deliberate promotion through `d2_state.sh`
