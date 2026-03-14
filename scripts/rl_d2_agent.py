@@ -228,6 +228,8 @@ class RLWallFollowerD2:
         self.episode_collisions = 0
         self.episode_traps = 0
         self.best_eval_score = float("-inf")
+        self.test_last_state_key: Optional[str] = None
+        self.test_same_state_steps = 0
         self.episode_history: List[EpisodeStats] = []
         self.evaluation_history: List[EvaluationStats] = []
         self._restore_training_state_if_requested()
@@ -624,7 +626,29 @@ class RLWallFollowerD2:
         acquisition_action = self._select_test_acquisition_action(state)
         if acquisition_action is not None:
             return acquisition_action
-        return self._select_greedy_action(state.key)
+        greedy_action = self._select_greedy_action(state.key)
+        return self._select_test_deadlock_breaker(state, greedy_action)
+
+    def _select_test_deadlock_breaker(self, state: D2EncodedState, greedy_action: str) -> str:
+        if self.test_last_state_key == state.key:
+            self.test_same_state_steps += 1
+        else:
+            self.test_last_state_key = state.key
+            self.test_same_state_steps = 1
+
+        # Test-only safeguard: if the policy keeps revisiting the same too-close
+        # state, prefer a forward-moving left correction over in-place pivots.
+        if (
+            state.front_bin == "clear"
+            and state.right_bin == "too_close"
+            and self.test_same_state_steps >= 3
+        ):
+            if state.heading_bin in {"parallel", "toward_wall"} and "turn_left_soft" in self.actions:
+                return "turn_left_soft"
+            if state.heading_bin == "away_from_wall" and "straight" in self.actions:
+                return "straight"
+
+        return greedy_action
 
     def _select_test_acquisition_action(self, state: D2EncodedState) -> Optional[str]:
         if not self.acquire_wall_enabled:
