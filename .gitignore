@@ -22,4 +22,7 @@ artifacts/runs/
 recordings/
 videos/
 submission/*.zip
+submission/*.tar
+submission/*.tar.gz
+submission/_build/
 config/qtable_d2_*_latest.yaml
