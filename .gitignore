@@ -21,4 +21,5 @@ artifacts/discarded/
 artifacts/runs/
 recordings/
 videos/
+submission/*.zip
 config/qtable_d2_*_latest.yaml

@@ -46,6 +46,34 @@ experiment or artifact.
 - Training logs were initially misleading because they printed the next action
   next to the previous action's reward, which made reward debugging harder than
   it needed to be.
+- The shared D2 launch still carried stale defaults (`max_episodes=420`,
+  `eval_every_episodes=20`) after the converge branch moved to a tighter budget,
+  which made some VM runs behave like the old setup even after the reward logic
+  had changed.
+- Manual test-start coordinates were flaky because `set_model_state` could fire
+  before the `triton` model existed in Gazebo, which is why some early "spawn at
+  I-beam" commands silently landed at the default world start instead.
+- The SARSA table was not corrupted during fine-tuning; the ugly late-stage
+  failure was a test-time local minimum in `clear|too_close|...` states where
+  the greedy policy alternated hard turns with zero forward motion and stayed in
+  place.
+
+## What The Debugging Sequence Actually Taught Us
+
+- Reward hacking was real, but it was not the only issue.
+- First, the reward function overpaid `straight` in `too_far` states, which let
+  the robot abandon the right wall and skip the intended U-turn recovery.
+- Second, once we fixed that, the reward still overpaid hard turns in otherwise
+  good states, so the robot learned jittery pivot-heavy behavior instead of
+  forward wall tracking.
+- Third, our initial evaluation definition was too weak and made "survived for
+  long enough" look like success even when the required scenario behavior was
+  wrong.
+- Fourth, some "policy looks broken" moments were actually stale-launch or stale
+  spawn issues rather than new learning failures.
+- Fifth, manual testing mattered more than the raw curves. Several times,
+  `latest` looked better than `best` because `best` had been selected under an
+  older evaluation regime or before the narrow reward fixes settled.
 
 ## Decisions We Are Keeping
 
@@ -60,6 +88,9 @@ experiment or artifact.
   single-episode reward spikes.
 - Manual test-start coordinates are useful and should be supported directly in
   launch files.
+- Q-learning remains the pure greedy baseline for submission demos.
+- SARSA is allowed a documented, opt-in, test-only local deadlock escape hatch
+  for recording if the pure greedy policy still sticks in one place.
 
 ## Current Branch Direction
 
@@ -97,6 +128,9 @@ experiment or artifact.
   without retyping coordinates or relying on memory.
 - Manual teleop, pose capture, and test-mode probing should be read-only with
   respect to RL checkpoints and metrics.
+- Final submission prep needs its own pass. The package, promoted tables,
+  tracked figure, ignored runtime junk, and video links are separate concerns
+  and should not be improvised at the last minute.
 
 ## What To Ignore
 
@@ -119,3 +153,36 @@ experiment or artifact.
 - The intended recovery preference when `right_bin == too_far` is:
   - prefer reacquiring the wall with right turns
   - stop rewarding `straight` through open-space / skipped-U-turn behavior
+
+## Final SARSA Deadlock Fix
+
+- The final SARSA-specific fix is **not** a training hack and does **not**
+  rewrite the learned table.
+- It is a test-only, opt-in deadlock breaker used only when:
+  - `mode == test`
+  - `algorithm == sarsa`
+  - `test_deadlock_breaker_enabled == true`
+- Logic:
+  - if the policy revisits the same `clear|too_close|...` state several times
+    in a row, we treat that as a local pivot loop rather than useful behavior
+  - when the heading is `parallel` or `toward_wall`, force `turn_left_soft`
+  - when the heading is `away_from_wall`, force `straight`
+- Why it works:
+  - hard turns in D2 have zero forward motion
+  - the stuck SARSA loop was just alternating hard turns while staying inside
+    the same bad local state
+  - the escape action injects just enough forward progress to leave the loop and
+    let the learned policy take over again
+- Q-learning test mode stays pure greedy; the helper is deliberately not shared.
+
+## Final Submission State
+
+- Branch: `codex/d2-converge`
+- Final promoted policies live in:
+  - `config/qtable_d2_qlearning_best.yaml`
+  - `config/qtable_d2_sarsa_best.yaml`
+- Tracked submission figure:
+  - `submission/d2_reward_vs_episode.png`
+- Public demo links:
+  - Q-learning: `https://youtu.be/eG3-Nfrn2DY`
+  - SARSA: `https://youtu.be/jf38wAeKkVA`
