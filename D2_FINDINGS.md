@@ -4,6 +4,8 @@ Concise log of the important engineering lessons from the D2 iterations.
 This is intentionally short and decision-focused. It is not a dump of every
 experiment or artifact.
 
+For a fuller report/youtube-oriented narrative, see `D2_REPORT_NOTES.md`.
+
 ## Confirmed Facts
 
 - Triton project frame for Project 2 uses `+Y` as forward.
