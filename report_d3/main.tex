@@ -1,0 +1,326 @@
+\documentclass[letterpaper, 10pt, conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
+
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage[hidelinks,hypertexnames=false]{hyperref}
+% Full-width material in two-column layout: figure*/table* float to page tops;
+% strip (cuted) keeps figures/tables at the current position in the source.
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{
+  font=footnotesize,
+  labelfont=bf,
+  labelsep=period,
+  skip=6pt,
+  hypcap=false,
+}
+\captionsetup[subfigure]{
+  font=footnotesize,
+  labelfont=bf,
+  labelformat=parens,
+  labelsep=space,
+  skip=4pt,
+  margin=6pt,
+}
+
+% ieeeconf sets typewriter to Courier (pcr); TinyTeX often lacks those metrics.
+\renewcommand{\ttdefault}{cmtt}
+\newcommand{\tok}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\fpath}[1]{\texttt{\detokenize{#1}}}
+
+\title{\LARGE \bf
+Right-Wall Following with Tabular Q-Learning and SARSA
+}
+
+\author{Shivraj Singh Bhatti}
+
+\begin{document}
+\providecommand{\figurename}{Fig.}
+\maketitle
+\thispagestyle{plain}
+\pagestyle{plain}
+
+\begin{abstract}
+We implemented a ROS/Gazebo right-wall follower with two tabular RL agents: Q-learning and SARSA.
+The final controller uses a 72-state local-geometry encoder built from front clearance, right-wall distance, wall heading, and front-left/front-right opening bits.
+This replaces an 18-state encoder that aliased corridor motion, U-turn mouths, and blocked-front recovery cases.
+The action set has five commands: two soft turns, two hard turns, and straight motion.
+Both algorithms use $\alpha=0.15$, $\gamma=0.95$, and $\epsilon$ decay from $0.20$ to $0.03$, with training capped at 360 episodes of 240 steps at 6\,Hz.
+Quantitative reward curves and checkpoint metadata show that both methods learn effective policies, but they also show that reward alone is not a complete selection metric.
+Early reward settings encouraged failure behaviors, including drifting through openings, local pivot loops, and a SARSA right-turn sweep in U-turn recovery.
+We fixed these issues by retuning \tok{too_far} reward ranking, tightening evaluation and checkpoint selection, fixing test-spawn timing in Gazebo, and adding a SARSA test-only deadlock breaker.
+The final package supports reproducible training and greedy evaluation for both algorithms, with saved checkpoints in \fpath{config/} and demos covering all five required wall-following situations.
+\end{abstract}
+
+\section{Introduction}
+Wall following is a useful benchmark for tabular reinforcement learning because the robot must react to local geometry, not just follow a single straight corridor.
+In this project, Triton must stay close to the right wall and still handle openings, bends, dead ends, and U-turn-like geometry.
+We implemented two classic RL methods, Q-learning and SARSA, inside a ROS Noetic package running in Gazebo.
+
+The key requirement was recovery behavior across the five required scenarios, not only high episode reward.
+During development, some checkpoints scored well while still drifting through open space, turning in place, or missing U-turn recovery.
+Therefore, we focused on state design, action semantics, reward ranking, and fixed test-time evaluation.
+
+The final package exposes both algorithms in training and testing modes.
+Training uses near-wall seed poses and learns a tabular policy from scratch or from an existing checkpoint.
+Testing loads the best learned policy and runs greedily from arbitrary spawn points.
+We also fixed two infrastructure issues that initially contaminated the results: a manual test-start race in Gazebo and a SARSA-only local deadlock in test mode.
+
+\section{Approach}
+
+\subsection{Sensing and State Encoding}
+The final D2 encoder uses a compact local-geometry representation with 72 states:
+\[
+2 \times 3 \times 3 \times 2 \times 2 = 72.
+\]
+The five factors are:
+\begin{itemize}
+  \item \texttt{front\_bin}: blocked or clear
+  \item \texttt{right\_bin}: too close, good, or too far
+  \item \texttt{heading\_bin}: toward wall, parallel, or away from wall
+  \item \texttt{front\_left\_open\_bin}: open or closed
+  \item \texttt{front\_right\_open\_bin}: open or closed
+\end{itemize}
+
+This encoder divides the laser field of view into local sectors that are meaningful for right-wall following.
+In the old 18-state design, right alignment (heading) was estimated from the difference between right-front and right-rear minimum ranges, i.e., \tok{rf\_min - rr\_min}; this proxy is preserved in \tok{heading\_bin} but is now disambiguated by opening bits.
+The current thresholds in \fpath{scripts/state_encoder.py} are:
+\begin{itemize}
+  \item front sector: $75^\circ$ to $105^\circ$
+  \item right-front sector: $15^\circ$ to $65^\circ$
+  \item right-rear sector: $-70^\circ$ to $-20^\circ$
+  \item front-left open sector: $100^\circ$ to $155^\circ$
+  \item front-right open sector: $25^\circ$ to $85^\circ$
+  \item front blocked threshold: $0.55$\,m
+  \item right too-close threshold: $0.55$\,m
+  \item right too-far threshold: $0.95$\,m
+  \item opening threshold: $1.20$\,m
+\end{itemize}
+
+That state design was chosen because it separates corridor tracking from the two failure cases that caused the most trouble: dead-end/U-turn geometry and wall loss through open space.
+
+\subsection{Action Space}
+The D2 controller uses five discrete actions:
+\begin{itemize}
+  \item \tok{turn_left_hard}
+  \item \tok{turn_left_soft}
+  \item \tok{straight}
+  \item \tok{turn_right_soft}
+  \item \tok{turn_right_hard}
+\end{itemize}
+
+The actions are intentionally asymmetric in their kinematics.
+\tok{straight} has the largest forward motion.
+Soft turns combine forward motion with moderate angular correction.
+Hard turns are near-pivot actions with zero forward speed.
+That choice helped with corner commitment, but it also created the possibility of a zero-progress loop if the reward function made hard turns too attractive.
+
+Figure~\ref{fig:state_action_design} summarizes the encoder geometry, the 18-state aliasing failure cases, and the five-action kinematic design used in both Q-learning and SARSA.
+
+\subsection{Q-Table Definition and Initialization}
+The Q-table is a dense mapping from state-action pairs to scalar values.
+If the input checkpoint is missing, the agent starts from zeros.
+If the input file is an older 18-state table, it is expanded into the 72-state space by copying the old values across the two opening bits.
+After loading, any missing state-action entries are filled with zero so the table is dense and safe for updates.
+
+That initialization strategy matters for two reasons.
+First, it makes training reproducible from a clean start.
+Second, it lets a legacy checkpoint bootstrap the final D2 state space instead of throwing away all prior learning.
+
+\subsection{Learning Rules}
+For Q-learning, the update is the standard off-policy rule \cite{watkins1992qlearning}:
+\[
+Q(s,a) \leftarrow Q(s,a) + \alpha \Bigl[r + \gamma \max_{a'} Q(s',a') - Q(s,a)\Bigr].
+\]
+For SARSA, the update is on-policy and follows the standard on-policy TD control form from introductory RL treatments \cite{sutton2018reinforcement,kaelbling1996reinforcement}:
+\[
+Q(s,a) \leftarrow Q(s,a) + \alpha \Bigl[r + \gamma Q(s',a') - Q(s,a)\Bigr].
+\]
+Both methods share the same state/action/reward definitions and hyperparameters; the only algorithmic difference is the target term in the update.
+
+The final hyperparameters were:
+\begin{itemize}
+  \item $\alpha = 0.15$
+  \item $\gamma = 0.95$
+  \item $\epsilon$ decays from $0.20$ to $0.03$
+  \item control rate: 6\,Hz
+  \item max episodes: 360
+  \item max steps per episode: 240
+\end{itemize}
+
+Training runs use near-wall seed poses and disable the wall-acquisition pre-controller so the TD updates reflect the learned policy rather than a hand-coded rescue behavior.
+Testing runs load the chosen best table and run greedily.
+A manual test-start option teleports the robot to named edge-case poses, but the pose application now waits until the Gazebo model exists so the test location is deterministic.
+
+\subsection{Reward Shaping}
+The reward function combines front clearance, right-wall distance, heading quality, forward progress, and state-action-specific corrections.
+The final reward design evolved through several rounds of failure analysis.
+In particular:
+\begin{itemize}
+  \item \tok{clear}\,+\,\tok{good}\,+\,\tok{parallel} should strongly favor \tok{straight}
+  \item \tok{clear}\,+\,\tok{good}\,+\,\tok{toward_wall} should favor \tok{turn_left_soft}
+  \item \tok{clear}\,+\,\tok{good}\,+\,\tok{away_from_wall} should favor \tok{turn_right_soft}
+  \item \tok{right_bin}~${}={}$~\tok{too_far} should prefer a forward-carrying right correction, not a pivot in place
+  \item blocked-front states should still reward the appropriate escape turn
+\end{itemize}
+
+The final tuned rewards in \fpath{config/d2_params.yaml} were selected from repeated failure analysis.
+We specifically removed three failure behaviors: drifting away from the wall, overusing hard turns in good states, and a SARSA right-turn sweep that failed U-turn recovery.
+
+\section{Experimental Results}
+
+\subsection{Quantitative Results}
+Figure~\ref{fig:reward} plots accumulated reward per episode with 10-episode rolling means.
+Table~\ref{tab:summary} summarizes the final training metadata recorded in the saved checkpoints.
+
+\begin{table}[htbp]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrl@{}}
+\toprule
+Alg. & Eps. & Time & $\alpha/\gamma$ & $\epsilon$ & Ckpt. \\
+\midrule
+Q-learning & 376 & 6.1\,h & 0.15/0.95 & $0.20{\to}0.03$ & \texttt{latest} \\
+SARSA & 560 & 17.9\,h & 0.15/0.95 & $0.20{\to}0.03$ & \texttt{latest} \\
+\bottomrule
+\end{tabular}
+\caption{Final training summary from checkpoint metadata. Time is approximate wall-clock duration computed from saved run timestamps.}
+\label{tab:summary}
+\end{table}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\linewidth,keepaspectratio]{../submission/d2_reward_vs_episode.png}
+  \caption{Accumulated reward over training (raw curves faint; 10-episode rolling means bold). Generated with \fpath{scripts/plot_d2_metrics.py}.}
+  \label{fig:reward}
+\end{figure}
+
+The most important quantitative lesson is that training reward alone was not sufficient to select the final policy.
+We found multiple cases where a checkpoint had a better-looking curve but worse real behavior in the required scenarios.
+The final \tok{best} policy was selected by fixed greedy evaluation and manual scenario testing, not by a single reward spike.
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.26\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}>{\raggedright\arraybackslash}p{0.35\textwidth}@{}}
+\toprule
+\textbf{Modeling choice} & \textbf{Observed behavior} & \textbf{Final fix} \\
+\midrule
+Too-far reward still paid enough for \texttt{straight} when the right wall was lost.
+  & Skipped the U-turn mouth and drifted through open space instead of reacquiring the wall.
+  & Penalize \texttt{straight} in too-far states; rank \texttt{turn\_right\_soft} above \texttt{turn\_right\_hard}. \\
+\midrule
+Treating all right turns alike in U-turn geometry (\texttt{too\_far}).
+  & SARSA learned a large right-hand sweep instead of crossing the mouth cleanly.
+  & Separate soft vs.\ hard right turns; reward the forward-carrying correction. \\
+\midrule
+Hard turns with zero linear speed (near-pivot).
+  & Local pivot loop under greedy test with no forward progress (SARSA especially).
+  & Keep training semantics; add SARSA-only, test-only deadlock breaker after repeated zero-progress steps. \\
+\midrule
+Manual spawn / test-start before the Gazebo model was ready.
+  & Policy judged from the wrong physical start; looked worse than it was.
+  & Wait for model presence before applying the named test pose. \\
+\bottomrule
+\end{tabular}
+\caption{Problem-structuring lessons from D2 iterations: each row links one design or evaluation choice to an observed failure and the fix used in the final system.}
+\label{tab:failure_lessons}
+\end{table*}
+
+\subsection{Qualitative Results}
+The assignment requires qualitative evidence that the learned policies handle the five wall-following situations.
+Figure~\ref{fig:qualitative} shows final trajectory afterimages for the required cases and makes turning direction and recovery behavior visible.
+
+Qualitative evaluation helped identify failure modes that reward curves alone did not show.
+Q-learning produced a reliable greedy policy in the required scenarios.
+SARSA also learned a strong policy, but it showed a local pivot loop in \tok{clear}\,+\,\tok{too\_close} states.
+The final SARSA test configuration includes an opt-in deadlock breaker for recording; the learned table is unchanged.
+
+\section{Comparison}
+Q-learning and SARSA converged to different behaviors under the same state/action/reward design.
+Q-learning was easier to debug because the max-over-actions target made greedy behavior clearer.
+SARSA was more sensitive to trajectory quality and exposed reward-model mistakes earlier.
+
+The main comparison points are:
+\begin{itemize}
+  \item Q-learning was more forgiving during training, but its checkpoint selection still needed manual validation.
+  \item SARSA was better at surfacing reward-model mistakes, especially the \tok{too_far} U-turn recovery issue.
+  \item Both methods needed the same state encoder and action set, but they responded differently to reward shaping.
+  \item The final SARSA deadlock was not solved by retraining from scratch; it was solved by making the test harness treat repeated zero-progress states as a local loop.
+\end{itemize}
+
+Two implementation lessons were most important.
+First, moving from 18 to 72 states reduced aliasing at dead ends and openings.
+Second, evaluation infrastructure (launch defaults, test-start timing, and fixed scenario checks) had a large effect on measured behavior.
+
+\section{Requirement Coverage}
+This report addresses all required items for Deliverable 3:
+\begin{itemize}
+  \item \textbf{Design details for Q-learning and SARSA:} sensing/FOV partition, state, action, reward, and Q-table setup are described in Section~II.
+  \item \textbf{Model parameters:} both methods use $\epsilon: 0.20 \rightarrow 0.03$, $\alpha=0.15$, and $\gamma=0.95$ with 6\,Hz control, 360-episode cap, and 240-step episode cap.
+  \item \textbf{Quantitative evidence:} reward-vs-episode curves (Fig.~\ref{fig:reward}) and checkpoint summary (Table~\ref{tab:summary}) show learning progress and training cost.
+  \item \textbf{Qualitative evidence:} final demo afterimages for all five wall-following situations are provided in Fig.~\ref{fig:qualitative}.
+  \item \textbf{Q-learning vs.\ SARSA comparison:} training episodes/time and behavior differences are summarized in Section~IV and Table~\ref{tab:summary}.
+\end{itemize}
+
+\section{Conclusion and Future Work}
+This project shows that a compact local-geometry state space, a five-action controller, and tuned rewards are sufficient for robust wall following in ROS/Gazebo.
+The main result is a policy that works in required scenarios and an evaluation process that detects reward-hacking failures early.
+
+Future work could go in three directions.
+The first is better scenario coverage with an even more systematic evaluation suite.
+The second is richer motion primitives, such as a slightly forward-moving hard turn, if that is treated as a new action set rather than a mid-run tweak.
+The third is more principled automated checkpoint selection so that \tok{best} is chosen from behavior-level evaluation rather than a single scalar reward signal.
+
+\begin{thebibliography}{9}
+\bibitem{watkins1992qlearning}
+C. J. C. H. Watkins and P. Dayan, ``Q-learning,'' \textit{Machine Learning}, vol.~8, no.~3--4, pp.~279--292, 1992.
+
+\bibitem{sutton2018reinforcement}
+R. S. Sutton and A. G. Barto, \textit{Reinforcement Learning: An Introduction}, 2nd ed. MIT Press, 2018.
+
+\bibitem{kaelbling1996reinforcement}
+L. P. Kaelbling, M. L. Littman, and A. W. Moore, ``Reinforcement Learning: A Survey,'' \textit{Journal of Artificial Intelligence Research}, vol.~4, pp.~237--285, 1996.
+\end{thebibliography}
+
+\clearpage
+\begin{figure*}[!t]
+  \centering
+  \subcaptionbox{Coarse 18-state geometry ($2 \times 3 \times 3$): \tok{front\_bin}, \tok{right\_bin}, and \tok{heading\_bin}, where heading uses right alignment proxy \tok{rf\_min - rr\_min}.}
+      [0.48\textwidth]{\includegraphics[width=\linewidth]{figures/generated/state_diagram_18state.png}}\hfill
+  \subcaptionbox{Final 72-state encoder ($2 \times 3 \times 3 \times 2 \times 2$) with \tok{front\_left\_open\_bin} and \tok{front\_right\_open\_bin}.}
+      [0.48\textwidth]{\includegraphics[width=\linewidth]{figures/generated/state_diagram_72state.png}}
+
+  \vspace{0.9em}
+  \subcaptionbox{Aliasing under \tok{clear|good|parallel}: \textbf{Case A} normal corridor (straight is correct), \textbf{Case B} U-turn mouth/opening (should begin reacquisition around the lip), and \textbf{Case C} blocked-front recovery (should commit to a recovery turn).}
+      [\linewidth]{\includegraphics[width=0.96\linewidth]{figures/generated/state_aliasing_new.png}}
+
+  \vspace{0.9em}
+  \subcaptionbox{Five discrete actions $(v_y,\omega_z)$ used by D2: soft turns keep forward progress, while hard turns are near-pivot actions with $v_y{=}0$.}
+      [\linewidth]{\includegraphics[width=0.96\linewidth]{figures/generated/action_set_d2.png}}
+  \caption{State and action design for D2 wall following. \textbf{(a)} Coarse 18-state encoder. \textbf{(b)} Final 72-state encoder that adds opening bits and separates geometries that were previously aliased. \textbf{(c)} Three physically different layouts that collide under the coarse tuple \tok{clear|good|parallel}; opening bits resolve this ambiguity. \textbf{(d)} Action kinematics used by both learning methods.}
+  \label{fig:state_action_design}
+\end{figure*}
+
+\begin{figure*}[!b]
+  \centering
+  \subcaptionbox{I-beam / interior wall end.}[0.31\textwidth]{%
+    \includegraphics[width=\linewidth]{figures/qualitative/qual_panel_a_ibeam.png}}\hfill
+  \subcaptionbox{Dead-end / U-turn recovery.}[0.31\textwidth]{%
+    \includegraphics[width=\linewidth]{figures/qualitative/qual_panel_b_uturn.png}}\hfill
+  \subcaptionbox{Right turn, $180^\circ$ right U-turn, left turn.}[0.31\textwidth]{%
+    \includegraphics[width=\linewidth]{figures/qualitative/qual_panel_c_three_turns.png}}
+  \caption{Qualitative evidence from final demos. \textbf{(a)} Interior wall-end (I-beam) handling. \textbf{(b)} Dead-end/U-turn-style recovery. \textbf{(c)} Composite sequence containing a right turn, a right U-turn, and a left turn. Together, these panels cover the five required wall-following situations.}
+  \label{fig:qualitative}
+\end{figure*}
+
+\end{document}
