@@ -12,6 +12,5 @@ list(APPEND CMAKE_CXX_FLAGS "${GAZEBO_CXX_FLAGS}")
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GAZEBO_CXX_FLAGS}")
 
-add_library(model_push SHARED model_push.cc)
-target_link_libraries(model_push ${GAZEBO_LIBRARIES} ${roscpp_LIBRARIES})
-
+add_library(cs603_model_push SHARED model_push.cc)
+target_link_libraries(cs603_model_push ${GAZEBO_LIBRARIES} ${roscpp_LIBRARIES})
