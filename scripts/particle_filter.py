@@ -3,7 +3,13 @@
 """Deliverable 1 runtime node and Deliverable 2 particle-filter foundation."""
 
 import os
+import sys
 import traceback
+
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
 
 import rospy
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
