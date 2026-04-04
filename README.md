@@ -1,97 +1,161 @@
-# CS 603 Particle Filter
-This package contains the CS 603 Particle Filter package. 
+# CS603 Particle Filter
 
-## Installation
+ROS Noetic package for COMPSCI 603 Project 3: robot localization with
+odometry motion models, likelihood-field sensor models, and a particle filter.
 
-### Install ROS Noetic
-Follow the instructions to install ROS Noetic for Ubuntu 20.04 at: http://wiki.ros.org/noetic/Installation/Ubuntu. Please install the ros-noetic-desktop-full version
+This workspace now includes the full Deliverable 1 foundation:
 
-### Install Other ROS Dependencies
+- a reusable map utility layer
+- an odometry-based motion model sampler
+- a likelihood-field sensor model backed by a distance transform
+- a Deliverable 1 runtime node that executes both models in Gazebo
+- a standalone likelihood-field generation script for map and PNG outputs
+
+## Package Layout
+
+- `scripts/map_utils.py`: map loading, world/map conversions, distance field
+- `scripts/motion_model.py`: odometry RTR motion model sampler
+- `scripts/sensor_model.py`: likelihood-field LiDAR scoring
+- `scripts/particle_filter.py`: Deliverable 1 runtime node and D2 foundation
+- `scripts/generate_likelihood_field.py`: offline metric-map/field generation
+- `scripts/position_publisher.py`: publishes `/odom` from Gazebo model state
+- `scripts/teleop_particle_filter.py`: keyboard teleop using +x forward
+- `config/particle_filter_params.yaml`: default model parameters
+- `maps/README.md`: where to place the saved house map
+
+## Dependencies
+
+Install ROS and the project dependencies on Ubuntu 20.04:
+
 ```bash
-sudo apt install ros-noetic-gazebo-ros-pkgs ros-noetic-depthimage-to-laserscan ros-noetic-gmapping python3-catkin-tools python3-pip ros-noetic-map-server
-pip3 install pynput
+sudo apt update
+sudo apt install -y \
+  ros-noetic-desktop-full \
+  ros-noetic-gazebo-ros-pkgs \
+  ros-noetic-depthimage-to-laserscan \
+  ros-noetic-gmapping \
+  ros-noetic-map-server \
+  python3-catkin-tools \
+  python3-numpy \
+  python3-pil \
+  python3-yaml \
+  python3-pip
+
+pip3 install --user pynput
 ```
 
-### Create a Catkin Workspace (if none exists)
-Follow the instructions at: https://wiki.ros.org/catkin/Tutorials/create_a_workspace
+The house world is provided by Turtlebot3 Gazebo:
 
 ```bash
-mkdir -p ~/catkin_ws/src
-cd ~/catkin_ws/
-catkin_make
-```
-
-### Install the Turtlebot3 Simulation Package (for the Gazebo Simulation Environment)
-Follow the installation instructions at: https://emanual.robotis.com/docs/en/platform/turtlebot3/quick-start/ (sections 3.1.3 and 3.1.4 for Noetic) first to install Turtlebot3 dependencies (if they have not yet been previously installed). 
-
-Next, download and install the `turtlebot3_simulations` package to your catkin workspace: 
-
-```bash
-cd ~/catkin_ws/src/
+cd ~/catkin_ws/src
 git clone -b noetic-devel https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
 cd ~/catkin_ws
 catkin_make
 ```
 
-Make sure that you are able to clone and successfully compile `turtlebot3_simulations` as the gazebo world will come from this package. 
+Clone this package into your catkin workspace:
 
-
-### Download and Install the CS 603 Particle Filter Repository
 ```bash
 cd ~/catkin_ws/src
 git clone https://gitlab.com/HCRLab/stingray-robotics/cs603_particle_filter.git
 cd ~/catkin_ws
 catkin_make
+source devel/setup.bash
 ```
 
-## Running the Simulation
+## Deliverable 1 Workflow
 
-### Generate Map Using GMapping (SLAM)
-To generate the map, you must launch the `triton_gmapping.launch` file then move the triton robot around using the teleop file. For more information, you can refer to the turtlebot3_slam page (https://emanual.robotis.com/docs/en/platform/turtlebot3/slam_simulation/) which is similar but uses a different robot. 
+### 1. Build the house map
+
+Launch GMapping:
 
 ```bash
-cd ~/catkin_ws
-source devel/setup.bash
 roslaunch cs603_particle_filter triton_gmapping.launch
 ```
 
-### Robot Teleoperation (important note)
+On a second terminal, drive the robot:
 
-In order for the robot to perform SLAM to generate the map, you may move the robot manually using the `teleop_particle_filter.py` script in the `cs603_particle_filter` package. 
-
-On a separate terminal, run: 
 ```bash
 rosrun cs603_particle_filter teleop_particle_filter.py
 ```
 
-__NOTE__: this teleop file has forward direction along the __+x-axis__ in order to be consistent with the standard ROS SLAM conventions as well as with the motion model equations. This is different from the previously released `stingray_sim` `teleop_robot.py` where the forward direction is along the _+y-axis_. 
+After the map is complete, save it:
 
-Also note that even if the `teleop_particle_filter.py` package allows for omnidirectional movement because the Triton robot supports it, the motion model discussed in class is for a differential drive robot only. 
-
-### Save the Map
-
-After you have a complete map, save it using the `map_server` package:
 ```bash
-rosrun map_server map_saver -f ~/map
+rosrun map_server map_saver -f ~/house_map
 ```
 
-### Generate the Metric Map and Likelihood Field
+Copy `~/house_map.yaml` and `~/house_map.pgm` into this package's `maps/`
+directory, or pass the absolute YAML path through the launch file.
 
-Once you have the map, you can use it to generate the metric map that will be used for the sensor model. You can implement your code directly in the file `scripts/generate_likelihood_field.py`. This script should generate a  metric map and/or likelihood field that you will use in your sensor model for the particle filtering. 
+### 2. Generate the metric map and likelihood field
 
-
-## Particle Filter
-
-To run the particle filter simulation environment: 
 ```bash
-cd ~/catkin_ws
-source devel/setup.bash
-roslaunch cs603_particle_filter particle_filter.launch
+rosrun cs603_particle_filter generate_likelihood_field.py \
+  --map-yaml $(rospack find cs603_particle_filter)/maps/house_map.yaml \
+  --metric-map-output $(rospack find cs603_particle_filter)/artifacts/house_metric_map.png \
+  --likelihood-field-output $(rospack find cs603_particle_filter)/artifacts/house_likelihood_field.png \
+  --cache-output $(rospack find cs603_particle_filter)/artifacts/house_likelihood_field.npz
 ```
 
-Gazebo and RViz will also automatically launch, as well as some helper nodes for the necessary TF transforms and robot odometry. To visualize the particles, you can add a `PoseArray` display to the RViz window to visualize the particles you generate. You can also visualize the position of the robot by adding a `Pose` or `Odometry` display to the RViz window. You can also visualize the map by adding a `Map` display to the RViz window. Search the RViz documentation to learn more about `PoseArray`, `Map`, and `Odometry`. 
+This produces:
 
-You can implement your code for the particle filter directly in the file `scripts/particle_filter.py`. 
+- a submission-ready metric map PNG
+- a submission-ready likelihood-field PNG
+- a cached numeric distance field for runtime reuse
 
-![Screenshot](docs/img/screenshot.png)
+### 3. Run Deliverable 1
 
+```bash
+roslaunch cs603_particle_filter particle_filter.launch \
+  map_yaml:=$(rospack find cs603_particle_filter)/maps/house_map.yaml
+```
+
+The launch file starts Gazebo, RViz, the robot pose publisher, and the
+Deliverable 1 node. The node:
+
+- subscribes to `/odom` and `/scan`
+- samples motion-model predictions from consecutive odometry readings
+- publishes motion uncertainty as a `PoseArray` on `/motion_model_samples`
+- evaluates the live LiDAR scan against the likelihood field
+- publishes the current pose and log-likelihood diagnostics
+
+## Key Runtime Parameters
+
+The defaults live in `config/particle_filter_params.yaml`.
+
+- `map_yaml`: YAML file produced by `map_saver`
+- `beam_step`: LiDAR beam subsampling factor
+- `max_usable_range`: max range included in scoring
+- `sigma_hit`: Gaussian sensor noise width
+- `motion_alpha{1,2,3,4}`: odometry noise coefficients
+- `motion_sample_count`: number of motion samples published for debug
+- `metric_map_output_png`: output path for the generated metric map PNG
+- `likelihood_field_output_png`: output path for the generated field PNG
+- `likelihood_field_cache`: `.npz` cache for the numeric distance field
+
+## Deliverable 2 Reuse
+
+The next deliverable only needs to add the particle set and resampling loop.
+The core interfaces are already isolated:
+
+- `OdometryMotionModel.sample_motion(pose, odom_prev, odom_curr) -> pose`
+- `LikelihoodFieldSensorModel.scan_log_likelihood(pose, scan_msg) -> float`
+
+That means Deliverable 2 can focus on:
+
+1. initializing particles in free space
+2. propagating them with `sample_motion`
+3. weighting them with `scan_log_likelihood`
+4. low-variance resampling
+
+## Submission Notes
+
+Deliverable 1 should include:
+
+- the ROS package
+- `house_metric_map.png`
+- `house_likelihood_field.png`
+
+The package metadata and launch file are set up so the grader can run the demo
+once the saved house map is included.

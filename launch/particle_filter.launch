@@ -2,6 +2,11 @@
     <arg name="world_file" default="$(find turtlebot3_gazebo)/worlds/turtlebot3_house.world"/>
     <arg name="robot_name" default="triton"/>
     <arg name="sdf_robot_file" default="$(find cs603_particle_filter)/models/$(arg robot_name)/model.sdf"/>
+    <arg name="params_file" default="$(find cs603_particle_filter)/config/particle_filter_params.yaml"/>
+    <arg name="map_yaml" default="$(find cs603_particle_filter)/maps/house_map.yaml"/>
+    <arg name="metric_map_output_png" default="$(find cs603_particle_filter)/artifacts/house_metric_map.png"/>
+    <arg name="likelihood_field_output_png" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.png"/>
+    <arg name="likelihood_field_cache" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.npz"/>
     <arg name="x" default="-3.0" />
     <arg name="y" default="1.0" />
     <arg name="z" default="0.0" />
@@ -26,6 +31,17 @@
     <node pkg="tf" type="static_transform_publisher" name="world_to_odom" args="0 0 0 0 0 0 /world /odom 100" />
     <node pkg="tf" type="static_transform_publisher" name="map_to_world" args="0.0 0.0 0.0 0 0 0.0 /map /world 100" />
     <node pkg="cs603_particle_filter" type="position_publisher.py" name="position_publisher" />
+    <node pkg="cs603_particle_filter"
+          type="particle_filter.py"
+          name="particle_filter"
+          output="screen"
+          respawn="false">
+      <rosparam command="load" file="$(arg params_file)"/>
+      <param name="map_yaml" value="$(arg map_yaml)"/>
+      <param name="metric_map_output_png" value="$(arg metric_map_output_png)"/>
+      <param name="likelihood_field_output_png" value="$(arg likelihood_field_output_png)"/>
+      <param name="likelihood_field_cache" value="$(arg likelihood_field_cache)"/>
+    </node>
 
     <node pkg="rviz" type="rviz" name="rviz" args="-d $(find cs603_particle_filter)/rviz/lidar.rviz" />
     
