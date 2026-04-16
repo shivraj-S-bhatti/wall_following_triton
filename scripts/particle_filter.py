@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 
-"""Deliverable 1 runtime node and Deliverable 2 particle-filter foundation."""
+"""Monte Carlo localization node for COMPSCI 603 Project 3 Deliverable 2."""
 
+import csv
 import os
+import random
 import sys
 import traceback
 
@@ -19,12 +21,63 @@ from std_msgs.msg import Float64
 
 from map_utils import LikelihoodFieldMap
 from motion_model import OdometryMotionModel
+from particle_filter_core import (
+    Particle,
+    effective_sample_size,
+    estimate_pose,
+    initialize_global_particles,
+    low_variance_resample,
+    normalize_log_weights,
+    position_error,
+    yaw_error,
+)
 from pf_math import pose_from_ros_pose, quaternion_xyzw_from_yaw
 from sensor_model import LikelihoodFieldSensorModel
 
 
-class Deliverable1Node:
-    """Runs the motion model and sensor model live in Gazebo."""
+class CsvRunLogger:
+    def __init__(self, output_path):
+        self.output_path = output_path
+        self.file_handle = None
+        self.writer = None
+        if output_path:
+            directory = os.path.dirname(output_path)
+            if directory:
+                os.makedirs(directory, exist_ok=True)
+            self.file_handle = open(output_path, "w", newline="", encoding="utf-8")
+            fieldnames = [
+                "time_sec",
+                "iteration",
+                "true_x",
+                "true_y",
+                "true_theta",
+                "estimate_x",
+                "estimate_y",
+                "estimate_theta",
+                "position_error_m",
+                "yaw_error_rad",
+                "neff",
+                "max_weight",
+                "used_beams",
+                "mean_log_likelihood",
+            ]
+            self.writer = csv.DictWriter(self.file_handle, fieldnames=fieldnames)
+            self.writer.writeheader()
+
+    def write(self, row):
+        if not self.writer:
+            return
+        self.writer.writerow(row)
+        self.file_handle.flush()
+
+    def close(self):
+        if self.file_handle:
+            self.file_handle.close()
+            self.file_handle = None
+
+
+class ParticleFilterNode:
+    """Runs a complete predict-correct-resample localization loop."""
 
     def __init__(self):
         self.map_yaml = self._required_path("~map_yaml")
@@ -37,12 +90,22 @@ class Deliverable1Node:
             rospy.get_param("~regenerate_likelihood_field", False)
         )
 
-        self.motion_sample_count = int(rospy.get_param("~motion_sample_count", 150))
+        self.rng = random.Random(int(rospy.get_param("~random_seed", 603)))
+        self.num_particles = int(rospy.get_param("~num_particles", 350))
+        self.resample_enabled = bool(rospy.get_param("~resample_enabled", True))
+        self.resample_min_neff_ratio = float(
+            rospy.get_param("~resample_min_neff_ratio", 1.0)
+        )
+        self.publish_every_n_scans = max(
+            1, int(rospy.get_param("~publish_every_n_scans", 1))
+        )
+
         self.motion_model = OdometryMotionModel(
             alpha1=rospy.get_param("~motion_alpha1", 0.05),
             alpha2=rospy.get_param("~motion_alpha2", 0.05),
             alpha3=rospy.get_param("~motion_alpha3", 0.10),
             alpha4=rospy.get_param("~motion_alpha4", 0.05),
+            rng=self.rng,
         )
 
         self.likelihood_field_map = LikelihoodFieldMap.load_or_create(
@@ -68,29 +131,46 @@ class Deliverable1Node:
             min_probability=rospy.get_param("~likelihood_epsilon", 1.0e-9),
         )
 
+        self.particles = initialize_global_particles(
+            self.likelihood_field_map, self.num_particles, self.rng
+        )
+        self.last_odom_pose = None
+        self.current_odom_pose = None
+        self.last_estimate = None
+        self.iteration = 0
+
+        self.run_logger = CsvRunLogger(rospy.get_param("~csv_log_path", ""))
+        rospy.on_shutdown(self.run_logger.close)
+
         self.current_pose_pub = rospy.Publisher(
             "/particle_filter/current_pose", PoseStamped, queue_size=5
         )
-        self.motion_samples_pub = rospy.Publisher(
-            "/motion_model_samples", PoseArray, queue_size=1
+        self.estimated_pose_pub = rospy.Publisher(
+            "/particle_filter/estimated_pose", PoseStamped, queue_size=5
+        )
+        self.particles_pub = rospy.Publisher(
+            "/particle_filter/particles", PoseArray, queue_size=1
         )
         self.sensor_score_pub = rospy.Publisher(
-            "/particle_filter/sensor_model_log_likelihood",
-            Float64,
-            queue_size=10,
+            "/particle_filter/mean_log_likelihood", Float64, queue_size=10
         )
-
-        self.last_odom_pose = None
-        self.current_odom_pose = None
+        self.neff_pub = rospy.Publisher(
+            "/particle_filter/effective_sample_size", Float64, queue_size=10
+        )
 
         rospy.Subscriber("/odom", Odometry, self.odom_callback, queue_size=20)
         rospy.Subscriber("/scan", LaserScan, self.scan_callback, queue_size=10)
 
+        self.publish_particles(rospy.Time.now())
         rospy.loginfo(
-            "Deliverable 1 node ready. map_yaml=%s beam_step=%d sigma_hit=%.3f",
-            self.map_yaml,
+            (
+                "Particle filter ready. particles=%d beam_step=%d "
+                "sigma_hit=%.3f resample_ratio=%.2f"
+            ),
+            self.num_particles,
             self.sensor_model.beam_step,
             self.sensor_model.sigma_hit,
+            self.resample_min_neff_ratio,
         )
 
     def _required_path(self, param_name):
@@ -106,12 +186,15 @@ class Deliverable1Node:
     def odom_callback(self, odom_msg):
         pose = pose_from_ros_pose(odom_msg.pose.pose)
         self.current_odom_pose = pose
-        self.publish_current_pose(odom_msg.header.stamp, pose)
+        self.publish_pose(
+            self.current_pose_pub,
+            "/particle_filter/current_pose",
+            odom_msg.header.stamp,
+            pose,
+        )
 
-        if self.last_odom_pose is not None and self.motion_sample_count > 0:
-            self.publish_motion_samples(
-                odom_msg.header.stamp, self.last_odom_pose, pose
-            )
+        if self.last_odom_pose is not None:
+            self.predict(self.last_odom_pose, pose)
 
         self.last_odom_pose = pose
 
@@ -119,40 +202,117 @@ class Deliverable1Node:
         if self.current_odom_pose is None:
             return
 
-        score = self.sensor_model.score_scan(self.current_odom_pose, scan_msg)
-        self.sensor_score_pub.publish(Float64(data=score["log_likelihood"]))
+        self.iteration += 1
+        details = self.correct(scan_msg)
+        estimate = estimate_pose(self.particles)
+        self.last_estimate = estimate
+
+        weights = [particle.weight for particle in self.particles]
+        neff = effective_sample_size(weights)
+        self.neff_pub.publish(Float64(data=neff))
+        self.sensor_score_pub.publish(Float64(data=details["mean_log_likelihood"]))
+
+        self.publish_pose(
+            self.estimated_pose_pub,
+            "/particle_filter/estimated_pose",
+            scan_msg.header.stamp,
+            estimate,
+        )
+        if self.iteration % self.publish_every_n_scans == 0:
+            self.publish_particles(scan_msg.header.stamp)
+
+        self.log_iteration(scan_msg.header.stamp, estimate, neff, details)
+
+        threshold = self.resample_min_neff_ratio * len(self.particles)
+        if self.resample_enabled and neff <= threshold:
+            self.particles = low_variance_resample(self.particles, self.rng)
+            if self.iteration % self.publish_every_n_scans == 0:
+                self.publish_particles(scan_msg.header.stamp)
+
         rospy.loginfo_throttle(
             2.0,
             (
-                "Sensor model log-likelihood %.3f using %d beams "
-                "(skipped %d max-range beams)"
+                "PF iter=%d neff=%.1f pos_err=%.3f yaw_err=%.3f "
+                "used_beams=%d"
             ),
-            score["log_likelihood"],
-            score["used_beams"],
-            score["skipped_max_range"],
+            self.iteration,
+            neff,
+            position_error(estimate, self.current_odom_pose),
+            yaw_error(estimate.theta, self.current_odom_pose.theta),
+            details["used_beams"],
         )
 
-    def publish_current_pose(self, stamp, pose):
+    def predict(self, odom_prev, odom_curr):
+        predicted = []
+        for particle in self.particles:
+            predicted_pose = self.motion_model.sample_motion(
+                pose=particle.pose,
+                odom_prev=odom_prev,
+                odom_curr=odom_curr,
+            )
+            predicted.append(Particle(predicted_pose, particle.weight))
+        self.particles = predicted
+
+    def correct(self, scan_msg):
+        log_likelihoods = []
+        used_beams = 0
+        skipped_max_range = 0
+
+        for particle in self.particles:
+            score = self.sensor_model.score_scan(particle.pose, scan_msg)
+            log_likelihoods.append(score["log_likelihood"])
+            used_beams = max(used_beams, score["used_beams"])
+            skipped_max_range = max(skipped_max_range, score["skipped_max_range"])
+
+        weights = normalize_log_weights(log_likelihoods)
+        for particle, weight in zip(self.particles, weights):
+            particle.weight = weight
+
+        mean_log_likelihood = (
+            sum(log_likelihoods) / len(log_likelihoods) if log_likelihoods else 0.0
+        )
+        return {
+            "used_beams": used_beams,
+            "skipped_max_range": skipped_max_range,
+            "mean_log_likelihood": mean_log_likelihood,
+            "max_weight": max(weights) if weights else 0.0,
+        }
+
+    def publish_particles(self, stamp):
+        particles_msg = PoseArray()
+        particles_msg.header.stamp = stamp
+        particles_msg.header.frame_id = "odom"
+        particles_msg.poses = [self.to_ros_pose(particle.pose) for particle in self.particles]
+        self.particles_pub.publish(particles_msg)
+
+    def publish_pose(self, publisher, topic_name, stamp, pose):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = stamp
         pose_msg.header.frame_id = "odom"
         pose_msg.pose = self.to_ros_pose(pose)
-        self.current_pose_pub.publish(pose_msg)
+        publisher.publish(pose_msg)
 
-    def publish_motion_samples(self, stamp, odom_prev, odom_curr):
-        samples_msg = PoseArray()
-        samples_msg.header.stamp = stamp
-        samples_msg.header.frame_id = "odom"
-
-        for _ in range(self.motion_sample_count):
-            sampled_pose = self.motion_model.sample_motion(
-                pose=odom_prev,
-                odom_prev=odom_prev,
-                odom_curr=odom_curr,
-            )
-            samples_msg.poses.append(self.to_ros_pose(sampled_pose))
-
-        self.motion_samples_pub.publish(samples_msg)
+    def log_iteration(self, stamp, estimate, neff, details):
+        if self.current_odom_pose is None:
+            return
+        self.run_logger.write(
+            {
+                "time_sec": stamp.to_sec() if hasattr(stamp, "to_sec") else 0.0,
+                "iteration": self.iteration,
+                "true_x": self.current_odom_pose.x,
+                "true_y": self.current_odom_pose.y,
+                "true_theta": self.current_odom_pose.theta,
+                "estimate_x": estimate.x,
+                "estimate_y": estimate.y,
+                "estimate_theta": estimate.theta,
+                "position_error_m": position_error(estimate, self.current_odom_pose),
+                "yaw_error_rad": yaw_error(estimate.theta, self.current_odom_pose.theta),
+                "neff": neff,
+                "max_weight": details["max_weight"],
+                "used_beams": details["used_beams"],
+                "mean_log_likelihood": details["mean_log_likelihood"],
+            }
+        )
 
     @staticmethod
     def to_ros_pose(pose):
@@ -171,10 +331,10 @@ class Deliverable1Node:
 def main():
     rospy.init_node("particle_filter", anonymous=False)
     try:
-        Deliverable1Node()
+        ParticleFilterNode()
         rospy.spin()
     except Exception as exc:  # pragma: no cover - ROS fatal path
-        rospy.logfatal("Failed to start Deliverable 1 node: %s", exc)
+        rospy.logfatal("Failed to start particle filter node: %s", exc)
         rospy.logfatal(traceback.format_exc())
         raise
 

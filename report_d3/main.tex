@@ -1,0 +1,69 @@
+\documentclass[letterpaper, 10 pt, conference]{ieeeconf}
+
+\IEEEoverridecommandlockouts
+\overrideIEEEmargins
+
+\title{\LARGE \bf
+Robot Localization for Triton Using Particle Filters
+}
+
+\author{Shivraj Bhatti}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+\pagestyle{empty}
+
+\begin{abstract}
+This report presents a Monte Carlo localization system for a simulated Triton
+robot in a known indoor map. The system combines an odometry-based motion model
+with a likelihood-field LiDAR sensor model and uses particle filtering to
+estimate robot pose over time. Placeholder text will be replaced with measured
+results after the Gazebo experiments are complete.
+\end{abstract}
+
+\section{Introduction}
+Robot localization estimates the pose of a robot relative to a known map. In
+this project, Triton localizes in a Gazebo house environment using a particle
+filter. The filter represents belief as weighted pose samples and repeatedly
+performs prediction, correction, and resampling.
+
+\section{Approach}
+\subsection{Map and Likelihood Field}
+The map was generated using ROS GMapping and saved as an occupancy-grid map.
+The likelihood field was computed as a distance transform over occupied cells,
+so each LiDAR beam endpoint can be scored by distance to the nearest obstacle.
+
+\subsection{Motion Model}
+The motion model uses consecutive odometry messages to compute the
+rotation-translation-rotation decomposition. Gaussian noise is applied to each
+motion component before propagating particles.
+
+\subsection{Sensor Model}
+The sensor model evaluates a subsampled LaserScan. For each valid beam, the
+beam endpoint is transformed into the map frame and scored with a zero-centered
+Gaussian over nearest-obstacle distance from the likelihood field.
+
+\subsection{Particle Filter}
+Particles are initialized uniformly in free map cells with random yaw. Each
+iteration applies odometry prediction, LiDAR likelihood weighting, weight
+normalization, pose estimation, and low-variance resampling.
+
+\section{Experiments}
+TODO: Insert map and likelihood-field figures.
+
+TODO: Insert qualitative screenshots showing particle convergence over time.
+
+TODO: Insert quantitative position and yaw error plots from
+\texttt{artifacts/pf\_metrics.png}.
+
+\section{Results and Discussion}
+TODO: Summarize convergence behavior, final error, failure cases, and sensitivity
+to map distortion, beam subsampling, and particle count.
+
+\section{Conclusion}
+TODO: State whether the robot localized successfully and describe future
+improvements such as adaptive resampling, random particle injection, and stronger
+handling of kidnapped-robot cases.
+
+\end{document}

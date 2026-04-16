@@ -213,6 +213,18 @@ class LikelihoodFieldMap:
             return False
         return self.occupancy_grid[cell] == self.FREE
 
+    def free_cell_indices(self):
+        return np.argwhere(self.occupancy_grid == self.FREE)
+
+    def random_free_pose(self, rng):
+        free_cells = self.free_cell_indices()
+        if len(free_cells) == 0:
+            raise ValueError("Cannot sample particles: map has no free cells.")
+        row, col = free_cells[rng.randrange(len(free_cells))]
+        x, y = self.map_to_world(int(row), int(col))
+        theta = rng.uniform(-math.pi, math.pi)
+        return x, y, theta
+
     @staticmethod
     def _ensure_parent_dir(path):
         directory = os.path.dirname(path)

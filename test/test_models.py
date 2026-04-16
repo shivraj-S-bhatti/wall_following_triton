@@ -19,6 +19,14 @@ if SCRIPTS_DIR not in sys.path:
 
 from map_utils import LikelihoodFieldMap
 from motion_model import OdometryMotionModel
+from particle_filter_core import (
+    Particle,
+    estimate_pose,
+    effective_sample_size,
+    initialize_global_particles,
+    low_variance_resample,
+    normalize_log_weights,
+)
 from pf_math import Pose2D
 from sensor_model import LikelihoodFieldSensorModel
 
@@ -99,6 +107,35 @@ class Deliverable1ModelTests(unittest.TestCase):
             matching_score = sensor_model.scan_log_likelihood(matching_pose, scan)
             shifted_score = sensor_model.scan_log_likelihood(shifted_pose, scan)
             self.assertGreater(matching_score, shifted_score)
+        finally:
+            temp_dir.cleanup()
+
+    def test_particle_filter_core_normalizes_estimates_and_resamples(self):
+        weights = normalize_log_weights([-100.0, -10.0, -10.0])
+        self.assertAlmostEqual(sum(weights), 1.0)
+        self.assertLess(weights[0], weights[1])
+
+        particles = [
+            Particle(Pose2D(0.0, 0.0, 0.0), 0.25),
+            Particle(Pose2D(2.0, 0.0, 0.0), 0.75),
+        ]
+        estimated = estimate_pose(particles)
+        self.assertAlmostEqual(estimated.x, 1.5)
+        self.assertGreater(effective_sample_size([0.5, 0.5]), 1.9)
+
+        resampled = low_variance_resample(particles)
+        self.assertEqual(len(resampled), len(particles))
+        self.assertAlmostEqual(sum(p.weight for p in resampled), 1.0)
+
+    def test_global_particle_initialization_stays_in_free_space(self):
+        temp_dir, yaml_path = self.create_temp_map()
+        try:
+            field_map = LikelihoodFieldMap.load_or_create(yaml_path)
+            particles = initialize_global_particles(field_map, 20)
+            self.assertEqual(len(particles), 20)
+            self.assertTrue(
+                all(field_map.is_free_world(p.pose.x, p.pose.y) for p in particles)
+            )
         finally:
             temp_dir.cleanup()
 

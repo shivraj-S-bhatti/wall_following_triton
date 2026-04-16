@@ -136,18 +136,59 @@ The defaults live in `config/particle_filter_params.yaml`.
 
 ## Deliverable 2 Reuse
 
-The next deliverable only needs to add the particle set and resampling loop.
-The core interfaces are already isolated:
+Deliverable 2 is implemented in `scripts/particle_filter.py`.
+The core interfaces remain isolated:
 
 - `OdometryMotionModel.sample_motion(pose, odom_prev, odom_curr) -> pose`
 - `LikelihoodFieldSensorModel.scan_log_likelihood(pose, scan_msg) -> float`
 
-That means Deliverable 2 can focus on:
+The runtime node:
 
-1. initializing particles in free space
-2. propagating them with `sample_motion`
-3. weighting them with `scan_log_likelihood`
-4. low-variance resampling
+- initializes particles globally in free map cells
+- predicts particles with odometry
+- weights particles with LiDAR likelihoods
+- estimates pose from weighted particles
+- resamples with low-variance resampling
+- publishes particles to `/particle_filter/particles`
+- publishes the estimate to `/particle_filter/estimated_pose`
+- logs D3 metrics to `artifacts/pf_run.csv`
+
+Run the D2 demo:
+
+```bash
+roslaunch cs603_particle_filter particle_filter.launch \
+  map_yaml:=$(rospack find cs603_particle_filter)/maps/house_map.yaml \
+  csv_log_path:=$(rospack find cs603_particle_filter)/artifacts/pf_run.csv
+```
+
+In RViz, add displays for:
+
+- `PoseArray`: `/particle_filter/particles`
+- `PoseStamped`: `/particle_filter/estimated_pose`
+- `PoseStamped`: `/particle_filter/current_pose`
+- `Map`: `/map`
+
+In another terminal, drive the robot:
+
+```bash
+rosrun cs603_particle_filter teleop_particle_filter.py
+```
+
+Record a demo video showing global initialization, scan weighting/convergence,
+robot motion, and particle updates.
+
+## Deliverable 3 Metrics
+
+After the D2 demo run, generate the quantitative figure:
+
+```bash
+python3 $(rospack find cs603_particle_filter)/scripts/plot_pf_metrics.py \
+  --csv $(rospack find cs603_particle_filter)/artifacts/pf_run.csv \
+  --output $(rospack find cs603_particle_filter)/artifacts/pf_metrics.png
+```
+
+The D3 draft lives in `report_d3/main.tex`. Fill the TODOs after the experiment
+screenshots and metrics are available.
 
 ## Submission Notes
 

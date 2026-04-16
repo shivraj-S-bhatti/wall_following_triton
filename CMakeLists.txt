@@ -171,6 +171,7 @@ include_directories(
 catkin_install_python(PROGRAMS
   scripts/generate_likelihood_field.py
   scripts/particle_filter.py
+  scripts/plot_pf_metrics.py
   scripts/position_publisher.py
   scripts/teleop_particle_filter.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

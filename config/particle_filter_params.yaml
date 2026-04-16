@@ -5,6 +5,12 @@ motion_alpha4: 0.05
 
 motion_sample_count: 150
 
+num_particles: 350
+random_seed: 603
+resample_enabled: true
+resample_min_neff_ratio: 1.0
+publish_every_n_scans: 1
+
 beam_step: 8
 sigma_hit: 0.20
 z_hit: 1.0
@@ -17,3 +23,4 @@ regenerate_likelihood_field: false
 metric_map_output_png: ""
 likelihood_field_output_png: ""
 likelihood_field_cache: ""
+csv_log_path: ""
