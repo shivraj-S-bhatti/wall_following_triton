@@ -12,11 +12,12 @@
     <arg name="init_mode" default="global"/>
     <arg name="initial_pose_std_xy" default="0.35"/>
     <arg name="initial_pose_std_yaw" default="0.80"/>
-    <arg name="random_particle_ratio" default="0.02"/>
+    <arg name="random_particle_ratio" default="0.0"/>
     <arg name="local_recovery_ratio" default="0.10"/>
     <arg name="beam_step" default="12"/>
     <arg name="sigma_hit" default="0.18"/>
-    <arg name="resample_min_neff_ratio" default="0.60"/>
+    <arg name="max_usable_range" default="8.0"/>
+    <arg name="resample_min_neff_ratio" default="0.15"/>
     <arg name="publish_map_to_odom_tf" default="false"/>
     <arg name="map_to_odom_x" default="0.0"/>
     <arg name="map_to_odom_y" default="0.0"/>
@@ -64,6 +65,7 @@
       <param name="local_recovery_ratio" value="$(arg local_recovery_ratio)"/>
       <param name="beam_step" value="$(arg beam_step)"/>
       <param name="sigma_hit" value="$(arg sigma_hit)"/>
+      <param name="max_usable_range" value="$(arg max_usable_range)"/>
       <param name="resample_min_neff_ratio" value="$(arg resample_min_neff_ratio)"/>
       <param name="publish_map_to_odom_tf" value="$(arg publish_map_to_odom_tf)"/>
     </node>
