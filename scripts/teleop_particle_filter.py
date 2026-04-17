@@ -19,7 +19,7 @@ rospy.init_node("teleop_robot")
 vel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=2)
 
 LIN_SPEED = 0.2
-ANG_SPEED = 1.0
+ANG_SPEED = 0.6
 
 vel_msg = Twist()
 key_state = {}
