@@ -98,9 +98,11 @@ class ParticleFilterNode:
         self.initial_pose_std_xy = float(rospy.get_param("~initial_pose_std_xy", 0.35))
         self.initial_pose_std_yaw = float(rospy.get_param("~initial_pose_std_yaw", 0.80))
         self.random_particle_ratio = float(rospy.get_param("~random_particle_ratio", 0.02))
+        self.local_recovery_ratio = float(rospy.get_param("~local_recovery_ratio", 0.10))
         self.invalid_pose_log_likelihood = float(
             rospy.get_param("~invalid_pose_log_likelihood", -1000000.0)
         )
+        self.uses_map_pose_prior = self.init_mode == "global"
         self.publish_map_to_odom_tf = bool(
             rospy.get_param("~publish_map_to_odom_tf", True)
         )
@@ -251,7 +253,10 @@ class ParticleFilterNode:
         threshold = self.resample_min_neff_ratio * len(self.particles)
         if self.resample_enabled and neff <= threshold:
             self.particles = low_variance_resample(self.particles, self.rng)
-            self.inject_random_particles()
+            if self.init_mode == "known_start":
+                self.inject_local_particles(self.current_odom_pose)
+            else:
+                self.inject_random_particles()
             if self.iteration % self.publish_every_n_scans == 0:
                 self.publish_particles(scan_msg.header.stamp)
 
@@ -285,7 +290,7 @@ class ParticleFilterNode:
         skipped_max_range = 0
 
         for particle in self.particles:
-            if not self.likelihood_field_map.is_free_world(
+            if self.uses_map_pose_prior and not self.likelihood_field_map.is_free_world(
                 particle.pose.x, particle.pose.y
             ):
                 log_likelihoods.append(self.invalid_pose_log_likelihood)
@@ -316,7 +321,9 @@ class ParticleFilterNode:
                 self.likelihood_field_map, self.num_particles, self.rng
             )
         elif self.init_mode == "odom_gaussian":
-            self.particles = self.sample_gaussian_particles(pose)
+            self.particles = self.sample_gaussian_particles(pose, require_free=True)
+        elif self.init_mode == "known_start":
+            self.particles = self.sample_gaussian_particles(pose, require_free=False)
         else:
             rospy.logwarn(
                 "Unknown init_mode=%s; falling back to global initialization.",
@@ -327,18 +334,21 @@ class ParticleFilterNode:
             )
         self.publish_particles(stamp)
 
-    def sample_gaussian_particles(self, center_pose):
+    def sample_gaussian_particles(self, center_pose, count=None, require_free=True):
+        count = self.num_particles if count is None else count
         particles = []
-        weight = 1.0 / float(self.num_particles)
+        weight = 1.0 / float(count)
         attempts = 0
-        while len(particles) < self.num_particles and attempts < self.num_particles * 20:
+        while len(particles) < count and attempts < count * 20:
             attempts += 1
             sample_x = center_pose.x + self.rng.gauss(0.0, self.initial_pose_std_xy)
             sample_y = center_pose.y + self.rng.gauss(0.0, self.initial_pose_std_xy)
             sample_theta = center_pose.theta + self.rng.gauss(
                 0.0, self.initial_pose_std_yaw
             )
-            if self.likelihood_field_map.is_free_world(sample_x, sample_y):
+            if not require_free or self.likelihood_field_map.is_free_world(
+                sample_x, sample_y
+            ):
                 particles.append(
                     Particle(
                         self.to_pose2d(sample_x, sample_y, sample_theta),
@@ -346,9 +356,25 @@ class ParticleFilterNode:
                     )
                 )
 
-        while len(particles) < self.num_particles:
+        while len(particles) < count:
             particles.append(Particle(center_pose, weight))
         return particles
+
+    def inject_local_particles(self, center_pose):
+        if self.local_recovery_ratio <= 0.0:
+            return
+        inject_count = int(round(self.local_recovery_ratio * len(self.particles)))
+        if inject_count <= 0:
+            return
+        new_particles = self.sample_gaussian_particles(
+            center_pose,
+            count=inject_count,
+            require_free=False,
+        )
+        self.particles[-inject_count:] = new_particles
+        equal_weight = 1.0 / float(len(self.particles))
+        for particle in self.particles:
+            particle.weight = equal_weight
 
     def inject_random_particles(self):
         if self.random_particle_ratio <= 0.0:

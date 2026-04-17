@@ -8,10 +8,13 @@
     <arg name="likelihood_field_output_png" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.png"/>
     <arg name="likelihood_field_cache" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.npz"/>
     <arg name="csv_log_path" default="$(find cs603_particle_filter)/artifacts/pf_run.csv"/>
-    <arg name="num_particles" default="350"/>
-    <arg name="init_mode" default="global"/>
+    <arg name="num_particles" default="500"/>
+    <arg name="init_mode" default="known_start"/>
+    <arg name="initial_pose_std_xy" default="0.12"/>
+    <arg name="initial_pose_std_yaw" default="0.25"/>
+    <arg name="local_recovery_ratio" default="0.15"/>
     <arg name="beam_step" default="8"/>
-    <arg name="sigma_hit" default="0.20"/>
+    <arg name="sigma_hit" default="0.25"/>
     <arg name="resample_min_neff_ratio" default="1.0"/>
     <arg name="publish_map_to_odom_tf" default="false"/>
     <arg name="map_to_odom_x" default="0.0"/>
@@ -54,6 +57,9 @@
       <param name="csv_log_path" value="$(arg csv_log_path)"/>
       <param name="num_particles" value="$(arg num_particles)"/>
       <param name="init_mode" value="$(arg init_mode)"/>
+      <param name="initial_pose_std_xy" value="$(arg initial_pose_std_xy)"/>
+      <param name="initial_pose_std_yaw" value="$(arg initial_pose_std_yaw)"/>
+      <param name="local_recovery_ratio" value="$(arg local_recovery_ratio)"/>
       <param name="beam_step" value="$(arg beam_step)"/>
       <param name="sigma_hit" value="$(arg sigma_hit)"/>
       <param name="resample_min_neff_ratio" value="$(arg resample_min_neff_ratio)"/>
