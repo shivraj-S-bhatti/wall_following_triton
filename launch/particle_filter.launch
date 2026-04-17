@@ -13,7 +13,10 @@
     <arg name="beam_step" default="8"/>
     <arg name="sigma_hit" default="0.20"/>
     <arg name="resample_min_neff_ratio" default="1.0"/>
-    <arg name="publish_map_to_odom_tf" default="true"/>
+    <arg name="publish_map_to_odom_tf" default="false"/>
+    <arg name="map_to_odom_x" default="0.0"/>
+    <arg name="map_to_odom_y" default="0.0"/>
+    <arg name="map_to_odom_yaw" default="0.0"/>
     <arg name="x" default="-3.0" />
     <arg name="y" default="1.0" />
     <arg name="z" default="0.0" />
@@ -35,6 +38,7 @@
     args="-file $(arg sdf_robot_file) -sdf -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg roll) -P $(arg pitch) -Y $(arg yaw) -model $(arg robot_name)" />
     
     <node pkg="tf" type="static_transform_publisher" name="base_link_to_base_scan" args="0 0 0.161 0 0 0 /base_link /base_scan 100" />
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="$(arg map_to_odom_x) $(arg map_to_odom_y) 0 $(arg map_to_odom_yaw) 0 0 /map /odom 100" />
     <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_yaml)" />
     <node pkg="cs603_particle_filter" type="position_publisher.py" name="position_publisher" />
     <node pkg="cs603_particle_filter"

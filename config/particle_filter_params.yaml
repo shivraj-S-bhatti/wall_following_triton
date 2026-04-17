@@ -12,7 +12,7 @@ initial_pose_std_xy: 0.35
 initial_pose_std_yaw: 0.80
 random_particle_ratio: 0.02
 invalid_pose_log_likelihood: -1000000.0
-publish_map_to_odom_tf: true
+publish_map_to_odom_tf: false
 resample_enabled: true
 resample_min_neff_ratio: 1.0
 publish_every_n_scans: 1
