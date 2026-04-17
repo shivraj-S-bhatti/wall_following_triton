@@ -3,6 +3,7 @@
 """Monte Carlo localization node for COMPSCI 603 Project 3 Deliverable 2."""
 
 import csv
+import math
 import os
 import random
 import sys
@@ -14,6 +15,7 @@ if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
 import rospy
+import tf
 from geometry_msgs.msg import Pose, PoseArray, PoseStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan
@@ -99,6 +101,9 @@ class ParticleFilterNode:
         self.invalid_pose_log_likelihood = float(
             rospy.get_param("~invalid_pose_log_likelihood", -1000000.0)
         )
+        self.publish_map_to_odom_tf = bool(
+            rospy.get_param("~publish_map_to_odom_tf", True)
+        )
         self.resample_enabled = bool(rospy.get_param("~resample_enabled", True))
         self.resample_min_neff_ratio = float(
             rospy.get_param("~resample_min_neff_ratio", 1.0)
@@ -147,6 +152,7 @@ class ParticleFilterNode:
         self.current_odom_pose = None
         self.last_estimate = None
         self.iteration = 0
+        self.tf_broadcaster = tf.TransformBroadcaster()
 
         self.run_logger = CsvRunLogger(rospy.get_param("~csv_log_path", ""))
         rospy.on_shutdown(self.run_logger.close)
@@ -233,11 +239,14 @@ class ParticleFilterNode:
             "/particle_filter/estimated_pose",
             scan_msg.header.stamp,
             estimate,
+            frame_id="map",
         )
         if self.iteration % self.publish_every_n_scans == 0:
             self.publish_particles(scan_msg.header.stamp)
 
         self.log_iteration(scan_msg.header.stamp, estimate, neff, details)
+        if self.publish_map_to_odom_tf:
+            self.publish_map_to_odom(scan_msg.header.stamp, estimate)
 
         threshold = self.resample_min_neff_ratio * len(self.particles)
         if self.resample_enabled and neff <= threshold:
@@ -358,16 +367,36 @@ class ParticleFilterNode:
     def publish_particles(self, stamp):
         particles_msg = PoseArray()
         particles_msg.header.stamp = stamp
-        particles_msg.header.frame_id = "odom"
+        particles_msg.header.frame_id = "map"
         particles_msg.poses = [self.to_ros_pose(particle.pose) for particle in self.particles]
         self.particles_pub.publish(particles_msg)
 
-    def publish_pose(self, publisher, topic_name, stamp, pose):
+    def publish_pose(self, publisher, topic_name, stamp, pose, frame_id="odom"):
         pose_msg = PoseStamped()
         pose_msg.header.stamp = stamp
-        pose_msg.header.frame_id = "odom"
+        pose_msg.header.frame_id = frame_id
         pose_msg.pose = self.to_ros_pose(pose)
         publisher.publish(pose_msg)
+
+    def publish_map_to_odom(self, stamp, estimate):
+        if self.current_odom_pose is None:
+            return
+
+        transform_yaw = estimate.theta - self.current_odom_pose.theta
+        cos_yaw = math.cos(transform_yaw)
+        sin_yaw = math.sin(transform_yaw)
+        odom_x = self.current_odom_pose.x
+        odom_y = self.current_odom_pose.y
+        transform_x = estimate.x - (cos_yaw * odom_x - sin_yaw * odom_y)
+        transform_y = estimate.y - (sin_yaw * odom_x + cos_yaw * odom_y)
+        quat_x, quat_y, quat_z, quat_w = quaternion_xyzw_from_yaw(transform_yaw)
+        self.tf_broadcaster.sendTransform(
+            (transform_x, transform_y, 0.0),
+            (quat_x, quat_y, quat_z, quat_w),
+            stamp,
+            "odom",
+            "map",
+        )
 
     def log_iteration(self, stamp, estimate, neff, details):
         if self.current_odom_pose is None:
