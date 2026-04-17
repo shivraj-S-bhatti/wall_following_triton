@@ -26,6 +26,7 @@ from particle_filter_core import (
     initialize_global_particles,
     low_variance_resample,
     normalize_log_weights,
+    normalize_particle_log_weights,
 )
 from pf_math import Pose2D
 from sensor_model import LikelihoodFieldSensorModel
@@ -126,6 +127,24 @@ class Deliverable1ModelTests(unittest.TestCase):
         resampled = low_variance_resample(particles)
         self.assertEqual(len(resampled), len(particles))
         self.assertAlmostEqual(sum(p.weight for p in resampled), 1.0)
+
+    def test_particle_weight_update_keeps_prior_belief(self):
+        particles = [
+            Particle(Pose2D(0.0, 0.0, 0.0), 0.80),
+            Particle(Pose2D(1.0, 0.0, 0.0), 0.20),
+        ]
+
+        equal_likelihood_weights = normalize_particle_log_weights(
+            particles, [0.0, 0.0]
+        )
+        self.assertAlmostEqual(equal_likelihood_weights[0], 0.80)
+        self.assertAlmostEqual(equal_likelihood_weights[1], 0.20)
+
+        corrected_weights = normalize_particle_log_weights(
+            particles, [math.log(0.5), math.log(2.0)]
+        )
+        self.assertLess(corrected_weights[0], 0.80)
+        self.assertGreater(corrected_weights[1], 0.20)
 
     def test_global_particle_initialization_stays_in_free_space(self):
         temp_dir, yaml_path = self.create_temp_map()

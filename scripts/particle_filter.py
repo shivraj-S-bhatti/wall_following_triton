@@ -29,7 +29,7 @@ from particle_filter_core import (
     estimate_pose,
     initialize_global_particles,
     low_variance_resample,
-    normalize_log_weights,
+    normalize_particle_log_weights,
     position_error,
     yaw_error,
 )
@@ -264,12 +264,13 @@ class ParticleFilterNode:
             2.0,
             (
                 "PF iter=%d neff=%.1f pos_err=%.3f yaw_err=%.3f "
-                "used_beams=%d"
+                "max_w=%.3f used_beams=%d"
             ),
             self.iteration,
             neff,
             position_error(estimate, self.current_odom_pose),
             yaw_error(estimate.theta, self.current_odom_pose.theta),
+            details["max_weight"],
             details["used_beams"],
         )
 
@@ -301,7 +302,7 @@ class ParticleFilterNode:
             used_beams = max(used_beams, score["used_beams"])
             skipped_max_range = max(skipped_max_range, score["skipped_max_range"])
 
-        weights = normalize_log_weights(log_likelihoods)
+        weights = normalize_particle_log_weights(self.particles, log_likelihoods)
         for particle, weight in zip(self.particles, weights):
             particle.weight = weight
 

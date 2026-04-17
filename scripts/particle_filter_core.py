@@ -43,6 +43,17 @@ def normalize_log_weights(log_weights):
     return [weight / total for weight in weights]
 
 
+def normalize_particle_log_weights(particles, log_likelihoods, min_weight=1.0e-300):
+    if len(particles) != len(log_likelihoods):
+        raise ValueError("Particle and likelihood counts must match.")
+
+    combined_log_weights = []
+    for particle, log_likelihood in zip(particles, log_likelihoods):
+        prior_log_weight = math.log(max(float(particle.weight), min_weight))
+        combined_log_weights.append(prior_log_weight + log_likelihood)
+    return normalize_log_weights(combined_log_weights)
+
+
 def effective_sample_size(weights):
     denominator = sum(weight * weight for weight in weights)
     if denominator <= 0.0:
