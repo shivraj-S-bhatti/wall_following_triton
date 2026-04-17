@@ -7,6 +7,11 @@ motion_sample_count: 150
 
 num_particles: 350
 random_seed: 603
+init_mode: global
+initial_pose_std_xy: 0.35
+initial_pose_std_yaw: 0.80
+random_particle_ratio: 0.02
+invalid_pose_log_likelihood: -1000000.0
 resample_enabled: true
 resample_min_neff_ratio: 1.0
 publish_every_n_scans: 1

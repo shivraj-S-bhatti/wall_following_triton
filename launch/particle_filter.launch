@@ -9,6 +9,7 @@
     <arg name="likelihood_field_cache" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.npz"/>
     <arg name="csv_log_path" default="$(find cs603_particle_filter)/artifacts/pf_run.csv"/>
     <arg name="num_particles" default="350"/>
+    <arg name="init_mode" default="global"/>
     <arg name="beam_step" default="8"/>
     <arg name="sigma_hit" default="0.20"/>
     <arg name="resample_min_neff_ratio" default="1.0"/>
@@ -49,6 +50,7 @@
       <param name="likelihood_field_cache" value="$(arg likelihood_field_cache)"/>
       <param name="csv_log_path" value="$(arg csv_log_path)"/>
       <param name="num_particles" value="$(arg num_particles)"/>
+      <param name="init_mode" value="$(arg init_mode)"/>
       <param name="beam_step" value="$(arg beam_step)"/>
       <param name="sigma_hit" value="$(arg sigma_hit)"/>
       <param name="resample_min_neff_ratio" value="$(arg resample_min_neff_ratio)"/>

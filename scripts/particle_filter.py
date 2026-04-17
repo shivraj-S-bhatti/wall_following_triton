@@ -92,6 +92,13 @@ class ParticleFilterNode:
 
         self.rng = random.Random(int(rospy.get_param("~random_seed", 603)))
         self.num_particles = int(rospy.get_param("~num_particles", 350))
+        self.init_mode = rospy.get_param("~init_mode", "global")
+        self.initial_pose_std_xy = float(rospy.get_param("~initial_pose_std_xy", 0.35))
+        self.initial_pose_std_yaw = float(rospy.get_param("~initial_pose_std_yaw", 0.80))
+        self.random_particle_ratio = float(rospy.get_param("~random_particle_ratio", 0.02))
+        self.invalid_pose_log_likelihood = float(
+            rospy.get_param("~invalid_pose_log_likelihood", -1000000.0)
+        )
         self.resample_enabled = bool(rospy.get_param("~resample_enabled", True))
         self.resample_min_neff_ratio = float(
             rospy.get_param("~resample_min_neff_ratio", 1.0)
@@ -131,9 +138,11 @@ class ParticleFilterNode:
             min_probability=rospy.get_param("~likelihood_epsilon", 1.0e-9),
         )
 
-        self.particles = initialize_global_particles(
-            self.likelihood_field_map, self.num_particles, self.rng
-        )
+        self.particles = []
+        if self.init_mode == "global":
+            self.particles = initialize_global_particles(
+                self.likelihood_field_map, self.num_particles, self.rng
+            )
         self.last_odom_pose = None
         self.current_odom_pose = None
         self.last_estimate = None
@@ -161,12 +170,14 @@ class ParticleFilterNode:
         rospy.Subscriber("/odom", Odometry, self.odom_callback, queue_size=20)
         rospy.Subscriber("/scan", LaserScan, self.scan_callback, queue_size=10)
 
-        self.publish_particles(rospy.Time.now())
+        if self.particles:
+            self.publish_particles(rospy.Time.now())
         rospy.loginfo(
             (
-                "Particle filter ready. particles=%d beam_step=%d "
+                "Particle filter ready. init_mode=%s particles=%d beam_step=%d "
                 "sigma_hit=%.3f resample_ratio=%.2f"
             ),
+            self.init_mode,
             self.num_particles,
             self.sensor_model.beam_step,
             self.sensor_model.sigma_hit,
@@ -186,6 +197,9 @@ class ParticleFilterNode:
     def odom_callback(self, odom_msg):
         pose = pose_from_ros_pose(odom_msg.pose.pose)
         self.current_odom_pose = pose
+        if not self.particles:
+            self.initialize_particles_from_pose(pose, odom_msg.header.stamp)
+
         self.publish_pose(
             self.current_pose_pub,
             "/particle_filter/current_pose",
@@ -200,6 +214,8 @@ class ParticleFilterNode:
 
     def scan_callback(self, scan_msg):
         if self.current_odom_pose is None:
+            return
+        if not self.particles:
             return
 
         self.iteration += 1
@@ -226,6 +242,7 @@ class ParticleFilterNode:
         threshold = self.resample_min_neff_ratio * len(self.particles)
         if self.resample_enabled and neff <= threshold:
             self.particles = low_variance_resample(self.particles, self.rng)
+            self.inject_random_particles()
             if self.iteration % self.publish_every_n_scans == 0:
                 self.publish_particles(scan_msg.header.stamp)
 
@@ -259,6 +276,12 @@ class ParticleFilterNode:
         skipped_max_range = 0
 
         for particle in self.particles:
+            if not self.likelihood_field_map.is_free_world(
+                particle.pose.x, particle.pose.y
+            ):
+                log_likelihoods.append(self.invalid_pose_log_likelihood)
+                continue
+
             score = self.sensor_model.score_scan(particle.pose, scan_msg)
             log_likelihoods.append(score["log_likelihood"])
             used_beams = max(used_beams, score["used_beams"])
@@ -277,6 +300,60 @@ class ParticleFilterNode:
             "mean_log_likelihood": mean_log_likelihood,
             "max_weight": max(weights) if weights else 0.0,
         }
+
+    def initialize_particles_from_pose(self, pose, stamp):
+        if self.init_mode == "global":
+            self.particles = initialize_global_particles(
+                self.likelihood_field_map, self.num_particles, self.rng
+            )
+        elif self.init_mode == "odom_gaussian":
+            self.particles = self.sample_gaussian_particles(pose)
+        else:
+            rospy.logwarn(
+                "Unknown init_mode=%s; falling back to global initialization.",
+                self.init_mode,
+            )
+            self.particles = initialize_global_particles(
+                self.likelihood_field_map, self.num_particles, self.rng
+            )
+        self.publish_particles(stamp)
+
+    def sample_gaussian_particles(self, center_pose):
+        particles = []
+        weight = 1.0 / float(self.num_particles)
+        attempts = 0
+        while len(particles) < self.num_particles and attempts < self.num_particles * 20:
+            attempts += 1
+            sample_x = center_pose.x + self.rng.gauss(0.0, self.initial_pose_std_xy)
+            sample_y = center_pose.y + self.rng.gauss(0.0, self.initial_pose_std_xy)
+            sample_theta = center_pose.theta + self.rng.gauss(
+                0.0, self.initial_pose_std_yaw
+            )
+            if self.likelihood_field_map.is_free_world(sample_x, sample_y):
+                particles.append(
+                    Particle(
+                        self.to_pose2d(sample_x, sample_y, sample_theta),
+                        weight,
+                    )
+                )
+
+        while len(particles) < self.num_particles:
+            particles.append(Particle(center_pose, weight))
+        return particles
+
+    def inject_random_particles(self):
+        if self.random_particle_ratio <= 0.0:
+            return
+        inject_count = int(round(self.random_particle_ratio * len(self.particles)))
+        if inject_count <= 0:
+            return
+        new_particles = initialize_global_particles(
+            self.likelihood_field_map, inject_count, self.rng
+        )
+        self.particles[-inject_count:] = new_particles
+        equal_weight = 1.0 / float(len(self.particles))
+        for particle in self.particles:
+            particle.weight = equal_weight
 
     def publish_particles(self, stamp):
         particles_msg = PoseArray()
@@ -326,6 +403,12 @@ class ParticleFilterNode:
         ros_pose.orientation.z = quat_z
         ros_pose.orientation.w = quat_w
         return ros_pose
+
+    @staticmethod
+    def to_pose2d(x, y, theta):
+        from pf_math import Pose2D, wrap_angle
+
+        return Pose2D(x, y, wrap_angle(theta))
 
 
 def main():
