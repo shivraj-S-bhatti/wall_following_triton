@@ -79,6 +79,11 @@ On a second terminal, drive the robot:
 rosrun cs603_particle_filter teleop_particle_filter.py
 ```
 
+Use mapping-safe motion only: `W/S` or `Up/Down` for forward/back, and
+`A/D`, `Left/Right`, or `Q/E` for in-place rotation. Lateral strafing is
+disabled because it can skew the SLAM map and does not match the odometry
+motion model used by the particle filter.
+
 After the map is complete, save it:
 
 ```bash

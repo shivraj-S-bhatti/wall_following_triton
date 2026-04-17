@@ -60,21 +60,18 @@ def key_press(key):
     if change:
         global vel_msg, LIN_SPEED, ANG_SPEED
         if   k in ['w', 'up']:
-            vel_msg.linear.x += LIN_SPEED
+            vel_msg.linear.x = LIN_SPEED
         elif k in ['s', 'down']:
-            vel_msg.linear.x -= LIN_SPEED
-        elif k in ['d', 'right']:
-            vel_msg.linear.y -= LIN_SPEED
-        elif k in ['a', 'left']:
-            vel_msg.linear.y += LIN_SPEED
-        elif k in ['e']:
-            vel_msg.angular.z -= ANG_SPEED
-        elif k in ['q']:
+            vel_msg.linear.x = -LIN_SPEED
+        elif k in ['a', 'left', 'q']:
             vel_msg.angular.z += ANG_SPEED
+        elif k in ['d', 'right', 'e']:
+            vel_msg.angular.z -= ANG_SPEED
         elif k in ['x']:
-            LIN_SPEED += 0.1
+            LIN_SPEED += 0.05
         elif k in ['z']:
-            LIN_SPEED -= 0.1
+            LIN_SPEED = max(0.05, LIN_SPEED - 0.05)
+        vel_msg.linear.y = 0.0
     return True
     
 
@@ -93,29 +90,27 @@ def key_release(key):
             vel_msg.linear.x = 0
         elif k in ['s', 'down']:
             vel_msg.linear.x = 0
-        elif k in ['d', 'right']:
-            vel_msg.linear.y = 0
-        elif k in ['a', 'left']:
-            vel_msg.linear.y = 0
-        elif k in ['e']:
+        elif k in ['a', 'left', 'q']:
             vel_msg.angular.z = 0
-        elif k in ['q']:
+        elif k in ['d', 'right', 'e']:
             vel_msg.angular.z = 0
         elif k in ['x']:
             pass
         elif k in ['z']:
             pass
+        vel_msg.linear.y = 0.0
     return True
     
 
 rate = rospy.Rate(10)
 def user_display():
-    print('Use WSAD or the ARROW KEYS to control Triton.\nUse Q & E to rotate Triton.\nUse x/z to increase/decrease speed')
+    print('Mapping-safe controls: W/S or Up/Down drive forward/back.\nA/D or Left/Right rotate in place. Q/E also rotate.\nStrafing is disabled. Use x/z to increase/decrease speed.')
     while True:
         try:
+            vel_msg.linear.y = 0.0
             print('\r' + ' '*80,end='')
             sys.stdout.flush()
-            log_str = "\r\t\tX: {}\tY: {}\tTHETA: {}\t".format(vel_msg.linear.x,
+            log_str = "\r\t\tX: {}\tY: {} locked\tTHETA: {}\t".format(vel_msg.linear.x,
                                                           vel_msg.linear.y,
                                                           vel_msg.angular.z)
             print(log_str, end=' ')
@@ -144,4 +139,3 @@ display_thread.start()
 
 #update ros topics on main thread
 rospy.spin()
-
