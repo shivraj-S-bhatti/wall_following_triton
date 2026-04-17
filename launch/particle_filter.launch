@@ -8,14 +8,15 @@
     <arg name="likelihood_field_output_png" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.png"/>
     <arg name="likelihood_field_cache" default="$(find cs603_particle_filter)/artifacts/house_likelihood_field.npz"/>
     <arg name="csv_log_path" default="$(find cs603_particle_filter)/artifacts/pf_run.csv"/>
-    <arg name="num_particles" default="500"/>
-    <arg name="init_mode" default="known_start"/>
-    <arg name="initial_pose_std_xy" default="0.12"/>
-    <arg name="initial_pose_std_yaw" default="0.25"/>
-    <arg name="local_recovery_ratio" default="0.15"/>
-    <arg name="beam_step" default="8"/>
-    <arg name="sigma_hit" default="0.25"/>
-    <arg name="resample_min_neff_ratio" default="1.0"/>
+    <arg name="num_particles" default="1200"/>
+    <arg name="init_mode" default="global"/>
+    <arg name="initial_pose_std_xy" default="0.35"/>
+    <arg name="initial_pose_std_yaw" default="0.80"/>
+    <arg name="random_particle_ratio" default="0.02"/>
+    <arg name="local_recovery_ratio" default="0.10"/>
+    <arg name="beam_step" default="6"/>
+    <arg name="sigma_hit" default="0.18"/>
+    <arg name="resample_min_neff_ratio" default="0.60"/>
     <arg name="publish_map_to_odom_tf" default="false"/>
     <arg name="map_to_odom_x" default="0.0"/>
     <arg name="map_to_odom_y" default="0.0"/>
@@ -41,7 +42,7 @@
     args="-file $(arg sdf_robot_file) -sdf -x $(arg x) -y $(arg y) -z $(arg z) -R $(arg roll) -P $(arg pitch) -Y $(arg yaw) -model $(arg robot_name)" />
     
     <node pkg="tf" type="static_transform_publisher" name="base_link_to_base_scan" args="0 0 0.161 0 0 0 /base_link /base_scan 100" />
-    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="$(arg map_to_odom_x) $(arg map_to_odom_y) 0 $(arg map_to_odom_yaw) 0 0 /map /odom 100" />
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" unless="$(arg publish_map_to_odom_tf)" args="$(arg map_to_odom_x) $(arg map_to_odom_y) 0 $(arg map_to_odom_yaw) 0 0 /map /odom 100" />
     <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_yaml)" />
     <node pkg="cs603_particle_filter" type="position_publisher.py" name="position_publisher" />
     <node pkg="cs603_particle_filter"
@@ -59,6 +60,7 @@
       <param name="init_mode" value="$(arg init_mode)"/>
       <param name="initial_pose_std_xy" value="$(arg initial_pose_std_xy)"/>
       <param name="initial_pose_std_yaw" value="$(arg initial_pose_std_yaw)"/>
+      <param name="random_particle_ratio" value="$(arg random_particle_ratio)"/>
       <param name="local_recovery_ratio" value="$(arg local_recovery_ratio)"/>
       <param name="beam_step" value="$(arg beam_step)"/>
       <param name="sigma_hit" value="$(arg sigma_hit)"/>
